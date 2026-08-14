@@ -1,0 +1,43 @@
+[project]
+name = "fis"
+version = "0.1.0"
+description = "Fleet Index Service"
+readme = "README.md"
+authors = [
+    { name = "Jessica Millar", email = "jessica.lynn.millar@gmail.com" }
+]
+requires-python = ">=3.12,<3.13.0"
+dependencies = [
+    "alembic>=1.17.2",
+    "fastapi>=0.123.0",
+    "psycopg[binary]>=3.1",
+    "pydantic-settings>=2.12.0",
+    "sqlalchemy>=2.0.44",
+    "uvicorn[standard]>=0.38.0",
+]
+
+[project.scripts]
+fis = "fis.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "testcontainers[postgres]>=4.0",
+    "httpx>=0.27",
+    "ruff>=0.16.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: needs a live Postgres and/or broker; self-skips otherwise",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+# The vendored sema snapshot is generated; its hygiene is the sema
+# generator's concern, and a regen would revert local fixes.
+extend-exclude = ["src/fis/sema"]
