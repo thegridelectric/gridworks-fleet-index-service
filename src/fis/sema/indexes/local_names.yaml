@@ -1,0 +1,12 @@
+enums:
+  base.g.node.class: base.g.node.class
+  g.node.instance.status: g.node.instance.status
+  g.node.instance.transport: g.node.instance.transport
+  g.node.status: g.node.status
+types:
+  connectivity.edge.gt: connectivity.edge.gt
+  fis.connect.claims: fis.connect.claims
+  g.node.forest: g.node.forest
+  g.node.forest.request: g.node.forest.request
+  g.node.gt: g.node.gt
+  g.node.instance.gt: g.node.instance.gt

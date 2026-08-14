@@ -1,0 +1,71 @@
+# GENERATED FILE - DO NOT EDIT
+# Generated from definitions/registry.yaml
+
+
+types:
+  connectivity.edge.gt:
+    latest_version: "000"
+    versioning_strategy: "literal"
+    versions:
+      "000":
+        summary: "Initial Sema version"
+
+  fis.connect.claims:
+    latest_version: "000"
+    versioning_strategy: "literal"
+    versions:
+      "000":
+        summary: "Initial Sema version"
+
+  g.node.forest:
+    latest_version: "002"
+    versioning_strategy: "literal"
+    versions:
+      "002":
+        summary: "- Nodes rebind to g.node.gt:006; SendTimeMs joins required"
+
+  g.node.forest.request:
+    latest_version: "000"
+    versioning_strategy: "literal"
+    versions:
+      "000":
+        summary: "Initial Sema version"
+
+  g.node.gt:
+    latest_version: "006"
+    versioning_strategy: "literal"
+    versions:
+      "006":
+        summary: "- Axiom 2 (PhysicalGNodeLocations) becomes activation-conditioned: PositionPointId is mandatory only when Status is Active — a Pending physical GNode may be locationless"
+
+  g.node.instance.gt:
+    latest_version: "001"
+    versioning_strategy: "literal"
+    versions:
+      "001":
+        summary: "- Run: add"
+
+enums:
+  base.g.node.class:
+    enum_type: "versioned"
+    note: "This enum is versioned; new versions are additive only."
+    versions:
+      "000": {}
+
+  g.node.instance.status:
+    enum_type: "versioned"
+    note: "This enum is versioned; new versions are additive only."
+    versions:
+      "000": {}
+
+  g.node.instance.transport:
+    enum_type: "versioned"
+    note: "This enum is versioned; new versions are additive only."
+    versions:
+      "000": {}
+
+  g.node.status:
+    enum_type: "versioned"
+    note: "This enum is versioned; new versions are additive only."
+    versions:
+      "000": {}

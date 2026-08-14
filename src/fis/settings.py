@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # universe token (`d1`), not the broker vhost (`d1__1`, which is
     # `<universe>__<run>`) — the validator below rejects the vhost form.
     universe: str = "d1"
-    db_url: SecretStr = SecretStr("postgresql+psycopg://fis:fispass@localhost:5436/fis")
+    db_url: SecretStr = SecretStr("postgresql+psycopg://fis:fispass@localhost:5437/fis")
     db_echo: bool = False
 
     model_config = SettingsConfigDict(

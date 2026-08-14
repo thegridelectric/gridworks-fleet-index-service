@@ -1,0 +1,68 @@
+# GENERATED FILE - DO NOT EDIT
+# Generated from definitions/registry.yaml
+#
+# ------------------------------------------------------------------
+# LOCAL LOOKUP (NON-AUTHORITATIVE)
+#
+# This file provides local resolution from Sema vocabulary words
+# to schema files within this snapshot.
+# ------------------------------------------------------------------
+
+types:
+  connectivity.edge.gt:
+    latest_version: '000'
+    versioning_strategy: literal
+    versions:
+      '000': definitions/types/connectivity.edge.gt/000.yaml
+  fis.connect.claims:
+    latest_version: '000'
+    versioning_strategy: literal
+    versions:
+      '000': definitions/types/fis.connect.claims/000.yaml
+  g.node.forest:
+    latest_version: '002'
+    versioning_strategy: literal
+    versions:
+      '002': definitions/types/g.node.forest/002.yaml
+  g.node.forest.request:
+    latest_version: '000'
+    versioning_strategy: literal
+    versions:
+      '000': definitions/types/g.node.forest.request/000.yaml
+  g.node.gt:
+    latest_version: '006'
+    versioning_strategy: literal
+    versions:
+      '006': definitions/types/g.node.gt/006.yaml
+  g.node.instance.gt:
+    latest_version: '001'
+    versioning_strategy: literal
+    versions:
+      '001': definitions/types/g.node.instance.gt/001.yaml
+enums:
+  base.g.node.class:
+    enum_type: versioned
+    latest_version: '000'
+    versions:
+      '000': definitions/enums/base.g.node.class/000.yaml
+  g.node.instance.status:
+    enum_type: versioned
+    latest_version: '000'
+    versions:
+      '000': definitions/enums/g.node.instance.status/000.yaml
+  g.node.instance.transport:
+    enum_type: versioned
+    latest_version: '000'
+    versions:
+      '000': definitions/enums/g.node.instance.transport/000.yaml
+  g.node.status:
+    enum_type: versioned
+    latest_version: '000'
+    versions:
+      '000': definitions/enums/g.node.status/000.yaml
+formats:
+  left.right.dot: definitions/formats/left.right.dot.yaml
+  non.empty.string: definitions/formats/non.empty.string.yaml
+  universe.run: definitions/formats/universe.run.yaml
+  utc.milliseconds: definitions/formats/utc.milliseconds.yaml
+  uuid4.str: definitions/formats/uuid4.str.yaml

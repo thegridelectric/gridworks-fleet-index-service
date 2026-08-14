@@ -35,13 +35,16 @@ Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync --all-groups
+docker compose up -d          # Postgres on localhost:5437
+uv run alembic upgrade head   # apply the schema
 uv run fis api
 ```
 
 That runs against the **dev universe on this machine** — `d1`, local
 Postgres — which is the default with no `.env` at all. A deployed box
 overrides it: copy `template.env` to `.env` and set the universe and
-database for that box.
+database for that box. Alembic reads the same `FIS_DB_URL`, so there is no
+second place to keep the connection string in sync.
 
 `FIS_UNIVERSE` takes the bare universe token (`hw1`), not the broker vhost
 (`hw1__2`, which is `<universe>__<run>`); the vhost form is rejected at boot.
@@ -50,3 +53,13 @@ database for that box.
 
 `./ci.sh` runs the full gate (lint, format check, tests) — the same thing CI
 runs, so a green run locally means a green push.
+
+The schema tests need a real Postgres. They spin up an ephemeral one with
+testcontainers by default, and **self-skip** when Docker can't provide it —
+so watch the skip count, not just the pass count. To run them against the
+compose Postgres instead (faster, and the reliable path when testcontainers
+won't start):
+
+```bash
+FIS_TEST_PG_URL=postgresql+psycopg://fis:fispass@localhost:5437/fis uv run pytest
+```

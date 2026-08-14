@@ -1,0 +1,12 @@
+{
+  "TypeName": "g.node.instance.gt",
+  "Version": "001",
+  "GNodeId": "9cff2689-eadc-4577-94ea-6d86d0d23e9e",
+  "GNodeInstanceId": "19ee09df-80ba-437b-b6c1-1eebe9d34801",
+  "Run": "hw1__1",
+  "Status": "Active",
+  "Transport": "RabbitAmqp",
+  "ConnectedAtUnixMs": 1762634100033,
+  "ConnectionHandle": "142.202.11.202:49085 -> 172.19.0.2:5671",
+  "ObservedPeerAddress": "142.202.11.202"
+}

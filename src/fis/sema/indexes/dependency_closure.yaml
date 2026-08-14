@@ -1,0 +1,65 @@
+# GENERATED FILE - DO NOT EDIT
+# Generated from definitions/registry.yaml
+
+types:
+  connectivity.edge.gt:
+    '000':
+      enums:
+      - g.node.status:000
+      formats:
+      - uuid4.str
+      types: []
+      versionless_types: []
+  fis.connect.claims:
+    '000':
+      enums: []
+      formats:
+      - left.right.dot
+      - non.empty.string
+      - universe.run
+      - uuid4.str
+      types: []
+      versionless_types: []
+  g.node.forest:
+    '002':
+      enums:
+      - base.g.node.class:000
+      - g.node.status:000
+      formats:
+      - left.right.dot
+      - utc.milliseconds
+      - uuid4.str
+      types:
+      - connectivity.edge.gt:000
+      - g.node.gt:006
+      versionless_types: []
+  g.node.forest.request:
+    '000':
+      enums: []
+      formats:
+      - left.right.dot
+      - uuid4.str
+      types: []
+      versionless_types: []
+  g.node.gt:
+    '006':
+      enums:
+      - base.g.node.class:000
+      - g.node.status:000
+      formats:
+      - left.right.dot
+      - uuid4.str
+      types: []
+      versionless_types: []
+  g.node.instance.gt:
+    '001':
+      enums:
+      - g.node.instance.status:000
+      - g.node.instance.transport:000
+      formats:
+      - universe.run
+      - utc.milliseconds
+      - uuid4.str
+      types: []
+      versionless_types: []
+versionless_types: {}

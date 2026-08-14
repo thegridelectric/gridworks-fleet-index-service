@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: fis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fis
+      POSTGRES_PASSWORD: fispass
+      POSTGRES_DB: fis
+    ports:
+      # Host 5437 → container 5432, matching the default FIS_DB_URL. Not
+      # 5432 (a host-local Postgres commonly holds it, and macOS resolves
+      # localhost→::1 first, so the publish gets shadowed); 5433/5434 are
+      # taken by sibling gridworks containers and 5435 by gnr, 5436 by weather-forecast.
+      - "5437:5432"
+    volumes:
+      - fis_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "fis"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  fis_pgdata:
+    name: fis_pgdata

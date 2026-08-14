@@ -1,0 +1,54 @@
+metadata:
+  generated_from: indexes/public_registry.yaml
+  generated_at: '2026-08-14T22:16:40Z'
+  note: Transitive closure of initial_targets
+initial_targets:
+- g.node.instance.gt:001
+- g.node.gt:006
+- g.node.forest:002
+- g.node.forest.request:000
+- fis.connect.claims:000
+worklist:
+  formats:
+    left.right.dot:
+      path: definitions/formats/left.right.dot.yaml
+    non.empty.string:
+      path: definitions/formats/non.empty.string.yaml
+    universe.run:
+      path: definitions/formats/universe.run.yaml
+    utc.milliseconds:
+      path: definitions/formats/utc.milliseconds.yaml
+    uuid4.str:
+      path: definitions/formats/uuid4.str.yaml
+  enums:
+    base.g.node.class:
+      '000':
+        path: definitions/enums/base.g.node.class/000.yaml
+    g.node.instance.status:
+      '000':
+        path: definitions/enums/g.node.instance.status/000.yaml
+    g.node.instance.transport:
+      '000':
+        path: definitions/enums/g.node.instance.transport/000.yaml
+    g.node.status:
+      '000':
+        path: definitions/enums/g.node.status/000.yaml
+  types:
+    connectivity.edge.gt:
+      '000':
+        path: definitions/types/connectivity.edge.gt/000.yaml
+    fis.connect.claims:
+      '000':
+        path: definitions/types/fis.connect.claims/000.yaml
+    g.node.forest:
+      '002':
+        path: definitions/types/g.node.forest/002.yaml
+    g.node.forest.request:
+      '000':
+        path: definitions/types/g.node.forest.request/000.yaml
+    g.node.gt:
+      '006':
+        path: definitions/types/g.node.gt/006.yaml
+    g.node.instance.gt:
+      '001':
+        path: definitions/types/g.node.instance.gt/001.yaml
