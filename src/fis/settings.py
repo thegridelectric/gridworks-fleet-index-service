@@ -1,9 +1,10 @@
 """Deploy configuration for the Fleet Index Service.
 
-One `.env`, one `FIS_` prefix. Every field the deployer must declare is
-required with no default — a wrong-but-plausible default here points the
-service at the wrong universe or the wrong database, and neither failure
-is loud.
+One `.env`, one `FIS_` prefix. The defaults are the **dev universe on this
+machine**: a fresh clone runs against `d1` and a local Postgres with no
+`.env` at all, because dev is where the service is exercised first and
+most often. A deployed box overrides both, and provisioning writes that
+`.env`.
 """
 
 from pydantic import SecretStr, field_validator
@@ -11,12 +12,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # The universe this FIS instance serves. REQUIRED, no default. A FIS
-    # holds one registry mirror, and a registry is scoped to one universe;
-    # runs partition inside that scope (the lease key is (principal, run)),
-    # so one instance serves every run its broker hosts.
-    universe: str
-    db_url: SecretStr
+    # The universe this FIS instance serves. A FIS holds one registry
+    # mirror, and a registry is scoped to one universe; runs partition
+    # inside that scope (the lease key is (principal, run)), so one
+    # instance serves every run its broker hosts. Note this is the bare
+    # universe token (`d1`), not the broker vhost (`d1__1`, which is
+    # `<universe>__<run>`) — the validator below rejects the vhost form.
+    universe: str = "d1"
+    db_url: SecretStr = SecretStr("postgresql+psycopg://fis:fispass@localhost:5436/fis")
     db_echo: bool = False
 
     model_config = SettingsConfigDict(

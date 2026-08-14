@@ -35,13 +35,16 @@ Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync --all-groups
-cp template.env .env      # then fill in FIS_UNIVERSE and FIS_DB_URL
 uv run fis api
 ```
 
-`FIS_UNIVERSE` and `FIS_DB_URL` are required with no defaults — a plausible
-default would point the service at the wrong universe or the wrong database,
-and neither failure is loud.
+That runs against the **dev universe on this machine** — `d1`, local
+Postgres — which is the default with no `.env` at all. A deployed box
+overrides it: copy `template.env` to `.env` and set the universe and
+database for that box.
+
+`FIS_UNIVERSE` takes the bare universe token (`hw1`), not the broker vhost
+(`hw1__2`, which is `<universe>__<run>`); the vhost form is rejected at boot.
 
 ## Development
 

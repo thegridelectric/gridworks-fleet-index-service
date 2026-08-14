@@ -1,7 +1,7 @@
-"""The universe declaration is validated at boot.
+"""Settings default to the dev universe, and the universe is validated at boot.
 
-A FIS instance mirrors exactly one registry, so a malformed or missing
-universe must fail loudly at startup rather than mirroring the wrong tree.
+A fresh clone runs against `d1` and a local Postgres with no `.env`. A
+malformed universe still fails loudly rather than mirroring nothing.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ def test_valid_universes_accepted(universe: str) -> None:
         "1d",  # does not start with a letter
         "d1.isone",  # a whole alias, not the universe segment
         "x1",  # not a known universe kind
+        "d1__1",  # the broker vhost, not the universe token
         "",
     ],
 )
@@ -34,6 +35,7 @@ def test_malformed_universes_rejected(universe: str) -> None:
         Settings(universe=universe, db_url=DB_URL)
 
 
-def test_universe_is_required() -> None:
-    with pytest.raises(ValidationError):
-        Settings(db_url=DB_URL)
+def test_defaults_are_the_local_dev_universe() -> None:
+    settings = Settings()
+    assert settings.universe == "d1"
+    assert "localhost" in settings.db_url.get_secret_value()
