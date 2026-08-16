@@ -23,7 +23,10 @@ from fis.gate import (
     Decision,
     GateReason,
     UserAuthRequest,
+    decide_resource,
+    decide_topic,
     decide_user,
+    decide_vhost,
     parse_user_request,
 )
 from fis.sema.enums import (
@@ -42,6 +45,8 @@ BEECH_ID = "19ee09df-80ba-437b-b6c1-1eebe9d34801"
 BEECH_ALIAS = "hw1.isone.me.versant.keene.beech.scada"
 INSTANCE_A = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa"
 INSTANCE_B = "bbbbbbbb-2222-4bbb-8bbb-bbbbbbbbbbbb"
+BEECH_LRH = "hw1-isone-me-versant-keene-beech-scada"
+SERVICE_ID = "5e971ce0-0000-4000-8000-000000000001"
 
 
 class FakeKiller:
@@ -250,6 +255,130 @@ def test_mqtt_first_connect_allowed_without_alias_check(session) -> None:
     assert result.decision is Decision.Allow
     lease = session.get(LeaseSql, INSTANCE_A)
     assert lease.transport is GNodeInstanceTransport.RabbitMqtt
+
+
+# --- /auth/vhost -----------------------------------------------------------
+
+
+def test_vhost_run_matches_vhost_allowed(session) -> None:
+    _seed(session)
+    session.add(_lease(INSTANCE_A, GNodeInstanceStatus.Active))
+    session.commit()
+    result = decide_vhost(session, username=BEECH_ID, vhost=RUN)
+    assert result == (Decision.Allow, GateReason.VhostRunMatch)
+
+
+def test_vhost_claimed_run_ne_vhost_denied(session) -> None:
+    # Lease was created on hw1__1 (the claimed run); the connection opens
+    # hw1__2 → no active lease there → deny.
+    _seed(session)
+    session.add(_lease(INSTANCE_A, GNodeInstanceStatus.Active))
+    session.commit()
+    result = decide_vhost(session, username=BEECH_ID, vhost="hw1__2")
+    assert result == (Decision.Deny, GateReason.VhostRunMismatch)
+
+
+def test_vhost_no_lease_denied(session) -> None:
+    _seed(session)
+    result = decide_vhost(session, username=BEECH_ID, vhost=RUN)
+    assert result == (Decision.Deny, GateReason.VhostRunMismatch)
+
+
+# --- /auth/resource --------------------------------------------------------
+
+
+def test_resource_allow_all() -> None:
+    assert decide_resource() == (Decision.Allow, GateReason.ResourceAllowed)
+
+
+# --- /auth/topic -----------------------------------------------------------
+
+
+def _rj_key(from_alias_lrh: str) -> str:
+    return f"rj.{from_alias_lrh}.scada.gt.sh.status.a.hw1-mm"
+
+
+def test_topic_read_always_allowed(session) -> None:
+    # No mirror, no principal — a read is about visibility, not authority.
+    result = decide_topic(
+        session, username=BEECH_ID, permission="read", routing_key=_rj_key("anything")
+    )
+    assert result == (Decision.Allow, GateReason.TopicRead)
+
+
+def test_topic_write_alias_match_allowed(session) -> None:
+    _seed(session)
+    result = decide_topic(
+        session, username=BEECH_ID, permission="write", routing_key=_rj_key(BEECH_LRH)
+    )
+    assert result == (Decision.Allow, GateReason.TopicWriteAliasMatch)
+
+
+def test_topic_write_alias_mismatch_denied(session) -> None:
+    _seed(session)
+    result = decide_topic(
+        session,
+        username=BEECH_ID,
+        permission="write",
+        routing_key=_rj_key("hw1-isone-me-versant-keene-elm-scada"),
+    )
+    assert result == (Decision.Deny, GateReason.TopicWriteAliasMismatch)
+
+
+def test_topic_write_gw_grammar_matches_segment_two(session) -> None:
+    # gw grammar: category.from_alias.to.to_class.type — from-alias still at
+    # token 1.
+    _seed(session)
+    rk = f"gw.{BEECH_LRH}.to.scada.gt.sh.status"
+    result = decide_topic(
+        session, username=BEECH_ID, permission="write", routing_key=rk
+    )
+    assert result == (Decision.Allow, GateReason.TopicWriteAliasMatch)
+
+
+def test_topic_write_mqtt_slashes_normalized(session) -> None:
+    _seed(session)
+    rk = f"rj/{BEECH_LRH}/scada/gt/sh/status/a/hw1-mm"
+    result = decide_topic(
+        session, username=BEECH_ID, permission="write", routing_key=rk
+    )
+    assert result == (Decision.Allow, GateReason.TopicWriteAliasMatch)
+
+
+def test_topic_write_malformed_key_denied(session) -> None:
+    _seed(session)
+    result = decide_topic(
+        session, username=BEECH_ID, permission="write", routing_key="rj"
+    )
+    assert result == (Decision.Deny, GateReason.TopicMalformed)
+
+
+def test_topic_write_service_principal_allowed(session) -> None:
+    # A service principal (no registry alias) is allowed to write in v1.
+    session.add(
+        PrincipalSql(
+            id=SERVICE_ID, kind=PrincipalKind.Service, status=PrincipalStatus.Active
+        )
+    )
+    session.commit()
+    result = decide_topic(
+        session,
+        username=SERVICE_ID,
+        permission="write",
+        routing_key=_rj_key("hw1-weather"),
+    )
+    assert result == (Decision.Allow, GateReason.TopicWriteServiceAllowed)
+
+
+def test_topic_write_unknown_identity_denied(session) -> None:
+    # Neither a GNode mirror row nor a principal — deny.
+    result = decide_topic(
+        session,
+        username=SERVICE_ID,
+        permission="write",
+        routing_key=_rj_key("whatever"),
+    )
+    assert result == (Decision.Deny, GateReason.TopicWriteNoIdentity)
 
 
 # --- request parsing -------------------------------------------------------

@@ -20,7 +20,14 @@ from fastapi.responses import PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 
 from fis.db.session import SessionLocal
-from fis.gate import Decision, decide_user, parse_user_request
+from fis.gate import (
+    Decision,
+    decide_resource,
+    decide_topic,
+    decide_user,
+    decide_vhost,
+    parse_user_request,
+)
 from fis.rabbit_admin import ConnectionKiller, default_killer
 from fis.settings import Settings
 
@@ -81,6 +88,58 @@ def create_app(
 
         body = await run_in_threadpool(run)
         return PlainTextResponse(body)
+
+    @app.api_route("/auth/vhost", methods=["GET", "POST"])
+    async def auth_vhost(request: Request) -> PlainTextResponse:
+        params = await _form_and_query(request)
+        username = params.get("username", "")
+        vhost = params.get("vhost", "")
+
+        def run() -> str:
+            with SessionLocal() as session:
+                result = decide_vhost(session, username=username, vhost=vhost)
+            logger.info(
+                "auth/vhost %s (%s) principal=%s vhost=%s",
+                result.decision.value,
+                result.reason.value,
+                username,
+                vhost,
+            )
+            return result.decision.value
+
+        return PlainTextResponse(await run_in_threadpool(run))
+
+    @app.api_route("/auth/resource", methods=["GET", "POST"])
+    async def auth_resource() -> PlainTextResponse:
+        # v1 allow-all; no request state is consulted.
+        return PlainTextResponse(decide_resource().decision.value)
+
+    @app.api_route("/auth/topic", methods=["GET", "POST"])
+    async def auth_topic(request: Request) -> PlainTextResponse:
+        params = await _form_and_query(request)
+        username = params.get("username", "")
+        permission = params.get("permission", "")
+        routing_key = params.get("routing_key", "")
+
+        def run() -> str:
+            with SessionLocal() as session:
+                result = decide_topic(
+                    session,
+                    username=username,
+                    permission=permission,
+                    routing_key=routing_key,
+                )
+            logger.info(
+                "auth/topic %s (%s) principal=%s permission=%s rk=%s",
+                result.decision.value,
+                result.reason.value,
+                username,
+                permission,
+                routing_key,
+            )
+            return result.decision.value
+
+        return PlainTextResponse(await run_in_threadpool(run))
 
     return app
 

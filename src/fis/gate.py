@@ -29,7 +29,13 @@ from typing import NamedTuple
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from fis.db.models import GNodeSql, LeaseSql, PrincipalSql, PrincipalStatus
+from fis.db.models import (
+    GNodeSql,
+    LeaseSql,
+    PrincipalKind,
+    PrincipalSql,
+    PrincipalStatus,
+)
 from fis.rabbit_admin import ConnectionKiller
 from fis.sema.codec import default_codec
 from fis.sema.enums import GNodeInstanceStatus, GNodeInstanceTransport
@@ -66,6 +72,18 @@ class GateReason(enum.StrEnum):
     Superseded = "superseded"
     KillUnconfirmed = "kill-unconfirmed"
     LeaseRace = "lease-race"
+    # /auth/vhost
+    VhostRunMatch = "vhost-run-match"
+    VhostRunMismatch = "vhost-run-mismatch"
+    # /auth/resource
+    ResourceAllowed = "resource-allowed"
+    # /auth/topic
+    TopicRead = "topic-read"
+    TopicWriteAliasMatch = "topic-write-alias-match"
+    TopicWriteAliasMismatch = "topic-write-alias-mismatch"
+    TopicWriteServiceAllowed = "topic-write-service-allowed"
+    TopicWriteNoIdentity = "topic-write-no-identity"
+    TopicMalformed = "topic-malformed"
 
 
 class GateResult(NamedTuple):
@@ -239,3 +257,79 @@ def decide_user(
         session.rollback()
         return _deny(GateReason.LeaseRace)
     return _allow(GateReason.Superseded)
+
+
+def decide_vhost(session: Session, *, username: str, vhost: str) -> GateResult:
+    """`/auth/vhost` — cross-check the claimed run against the vhost opened.
+
+    The `/auth/vhost` call carries the actual vhost but not the claims; the
+    claimed run reached FIS at `/auth/user` (which fires first) and was
+    recorded as the lease's run. So an Active lease for (principal, vhost)
+    exists iff the client's claimed run equals the vhost it is opening.
+    gwbase derives `Run` from the vhost, so an honest actor matches by
+    construction; a hand-built client claiming a different run has no lease
+    here and is denied.
+    """
+    lease = (
+        session.query(LeaseSql)
+        .filter(
+            LeaseSql.principal_id == username,
+            LeaseSql.run == vhost,
+            LeaseSql.status == GNodeInstanceStatus.Active,
+        )
+        .one_or_none()
+    )
+    if lease is None:
+        return _deny(GateReason.VhostRunMismatch)
+    return _allow(GateReason.VhostRunMatch)
+
+
+def decide_resource() -> GateResult:
+    """`/auth/resource` — v1 allow-all (executor "Scope")."""
+    return _allow(GateReason.ResourceAllowed)
+
+
+# tokens[0] is the category (rj/rjb/gw); tokens[1] is the from-alias in LRH
+# (hyphenated) form — the "segment 2" of the routing-key grammar, identical
+# across all three grammars (gwbase `transport_encoding.py`).
+FROM_ALIAS_SEGMENT = 1
+
+
+def decide_topic(
+    session: Session, *, username: str, permission: str, routing_key: str
+) -> GateResult:
+    """`/auth/topic` — the alias-pinning write rule; reads are allowed.
+
+    A read (fired on every MQTT subscribe) is about visibility, not
+    authority, so it is allowed (OPS-420 "The read side is open"). A write is
+    authorized iff the routing key's from-alias segment equals the wire-form
+    (hyphenated) current alias of the connection's identity.
+    """
+    if permission != "write":
+        return _allow(GateReason.TopicRead)
+
+    # MQTT topics arrive slash-separated; the AMQP routing key is dotted.
+    # Normalize so one rule covers both (aliases are hyphenated, never
+    # slashed, so this cannot corrupt a segment).
+    parts = routing_key.replace("/", ".").split(".")
+    if len(parts) <= FROM_ALIAS_SEGMENT:
+        return _deny(GateReason.TopicMalformed)
+    segment = parts[FROM_ALIAS_SEGMENT]
+
+    gnode = session.get(GNodeSql, username)
+    if gnode is None:
+        # Not a GNode in the mirror. A service principal has no registry alias
+        # to pin in v1, so its writes are allowed (it is cert-authenticated
+        # infra); anything else is denied.
+        principal = session.get(PrincipalSql, username)
+        if (
+            principal is not None
+            and principal.kind == PrincipalKind.Service
+            and principal.status == PrincipalStatus.Active
+        ):
+            return _allow(GateReason.TopicWriteServiceAllowed)
+        return _deny(GateReason.TopicWriteNoIdentity)
+
+    if segment == gnode.alias.replace(".", "-"):
+        return _allow(GateReason.TopicWriteAliasMatch)
+    return _deny(GateReason.TopicWriteAliasMismatch)
