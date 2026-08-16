@@ -155,6 +155,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "sqlalchemy" },
@@ -163,7 +164,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "testcontainers" },
@@ -173,6 +173,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.17.2" },
     { name = "fastapi", specifier = ">=0.123.0" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
@@ -181,7 +182,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.16.1" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.0" },

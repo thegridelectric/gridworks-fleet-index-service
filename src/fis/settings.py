@@ -59,3 +59,25 @@ class ApiRunSettings(BaseSettings):
         env_nested_delimiter="__",
         extra="ignore",
     )
+
+
+class RabbitMgmtSettings(BaseSettings):
+    """Where FIS reaches the broker's management API for the supersession
+    connection-kill. Colocated by design, so localhost by default.
+
+    The defaults are the dev broker (`gw-dev-rabbit` management UI on 15672).
+    A deployed box overrides the credentials from its `.env`
+    (`FIS_RABBIT_MGMT_USER` / `FIS_RABBIT_MGMT_PASSWORD`), which provisioning
+    writes; they are never committed.
+    """
+
+    mgmt_url: str = "http://localhost:15672"
+    mgmt_user: SecretStr = SecretStr("guest")
+    mgmt_password: SecretStr = SecretStr("guest")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="fis_rabbit_",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
