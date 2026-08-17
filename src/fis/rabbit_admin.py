@@ -39,6 +39,17 @@ class ConnectionKiller(Protocol):
         """
         ...
 
+    def kill_identity(self, *, principal_id: str) -> int:
+        """Close every connection for this identity across all vhosts, and
+        return how many were closed.
+
+        This is the reconvergence flush behind a registry rename: it is not
+        gated on confirmation the way `kill` is (the reconnect re-authorizes
+        against the new alias), so it is best-effort — a management-API
+        failure is logged, not fatal.
+        """
+        ...
+
 
 class RabbitMgmtKiller:
     """Kills connections through `rabbitmq_management`'s HTTP API.
@@ -92,6 +103,33 @@ class RabbitMgmtKiller:
             )
             return False
         return True
+
+    def kill_identity(self, *, principal_id: str) -> int:
+        killed = 0
+        try:
+            with httpx.Client(auth=self.auth, timeout=self.timeout) as client:
+                resp = client.get(f"{self.base_url}/api/connections")
+                resp.raise_for_status()
+                names = [
+                    conn["name"]
+                    for conn in resp.json()
+                    if conn.get("user") == principal_id
+                ]
+                for name in names:
+                    resp = client.delete(
+                        f"{self.base_url}/api/connections/{quote(name, safe='')}",
+                        headers={"X-Reason": "fis-reconvergence"},
+                    )
+                    resp.raise_for_status()
+                    killed += 1
+        except Exception as e:  # noqa: BLE001 -- best-effort flush; log and move on
+            logger.warning(
+                "reconvergence kill failed for %s after %d closed: %s",
+                principal_id,
+                killed,
+                e,
+            )
+        return killed
 
 
 @lru_cache(maxsize=1)
