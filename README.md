@@ -19,6 +19,23 @@ state, and the lease key is (principal, run). So one FIS serves every run its
 broker hosts, and the same GNode identity may legitimately hold simultaneous
 leases on different runs.
 
+## Sema
+
+Message boundaries in this repo are governed by
+**[Sema](https://github.com/thegridelectric/sema)** — a vocabulary registry
+for structured messages exchanged between independent systems. Sema defines
+versioned types, enums, and formats expressed as JSON Schema; these act as
+**boundary contracts**, making the structure and semantics of serialized
+messages explicit and mechanically verifiable. Sema applies only at system
+boundaries — it does not prescribe runtime architecture, database design,
+or internal object models. Schema ids live under
+`https://schemas.electricity.works`.
+
+This repo works from a vendored snapshot at `src/fis/sema` — generated,
+never hand-edit. Regenerate with `scripts/regen_sema_snapshot.sh` from
+`src/fis/sema_seed_request.yaml`; see `src/fis/sema/README.md` for the
+working rules.
+
 ## Layout
 
 ```

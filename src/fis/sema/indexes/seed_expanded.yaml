@@ -1,13 +1,12 @@
 metadata:
   generated_from: indexes/public_registry.yaml
-  generated_at: '2026-08-14T22:16:40Z'
+  generated_at: '2026-08-23T13:30:59Z'
   note: Transitive closure of initial_targets
 initial_targets:
-- g.node.instance.gt:001
-- g.node.gt:006
+- fis.connect.claims:000
 - g.node.forest:002
 - g.node.forest.request:000
-- fis.connect.claims:000
+- g.node.instance.gt:001
 worklist:
   formats:
     left.right.dot:
