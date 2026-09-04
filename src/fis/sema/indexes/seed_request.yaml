@@ -1,5 +1,6 @@
 # Seed request for the fis Sema snapshot — minimum cover of what fis speaks:
-# its own claims word plus the registry-mirror message types. Everything else
+# its own claims word, the auth event it records (its two enums arrive by
+# closure), plus the registry-mirror message types. Everything else
 # in the snapshot (g.node.gt, connectivity.edge.gt, the g-node enums, formats)
 # arrives through dependency closure — g.node.forest:002 structurally pins
 # g.node.gt:006, so it is not seeded directly. Versions are explicit: fis is
@@ -12,6 +13,8 @@
 initial_targets:
   types:
     fis.connect.claims:
+      versions: ["000"]
+    fis.instance.authorization.event:
       versions: ["000"]
     g.node.forest:
       versions: ["002"]

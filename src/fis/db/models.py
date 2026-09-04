@@ -5,6 +5,8 @@ serialized GT snapshot, validated through the codec before insert or update:
 
 - `g_nodes`  — the registry mirror, bijective with `g.node.gt`
 - `leases`   — instance authority, bijective with `g.node.instance.gt/001`
+- `auth_events` — one connect-gate verdict each, bijective with
+  `fis.instance.authorization.event`
 - `principals` — no Sema word exists yet (see the note on the class)
 
 The mirror is a *mirror*: gnr owns this data, FIS holds a copy so that auth
@@ -31,11 +33,13 @@ from sqlalchemy.orm import (
 
 from fis.sema.enums import (
     BaseGNodeClass,
+    FisAuthorizationDecision,
+    FisAuthorizationReason,
     GNodeInstanceStatus,
     GNodeInstanceTransport,
     GNodeStatus,
 )
-from fis.sema.types import GNodeGt, GNodeInstanceGt
+from fis.sema.types import FisInstanceAuthorizationEvent, GNodeGt, GNodeInstanceGt
 
 Base = declarative_base()
 
@@ -256,4 +260,71 @@ class LeaseSql(Base):
             revoked_at_unix_ms=gt.revoked_at_unix_ms,
             connection_handle=gt.connection_handle,
             observed_peer_address=gt.observed_peer_address,
+        )
+
+
+# ============================================================
+#  AUTH EVENTS
+# ============================================================
+
+
+class AuthEventSql(Base):
+    """One connect-gate verdict — bijective with
+    `fis.instance.authorization.event`.
+
+    The audit trail of `/auth/user`: every allow and every deny, with the
+    reason the gate gave. It records authority decisions and grants nothing;
+    the broker's verdict at connect time is the enforcement. Rows are
+    append-only and live in FIS's own store because FIS joins no broker;
+    the fleet's persistent store reads them out from here.
+    """
+
+    __tablename__ = "auth_events"
+
+    event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    principal_id: Mapped[str] = mapped_column(String, index=True)
+    instance_id: Mapped[str] = mapped_column(String, index=True)
+    run: Mapped[str] = mapped_column(String)
+    alias: Mapped[str | None] = mapped_column(String, nullable=True)
+    g_node_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    transport: Mapped[GNodeInstanceTransport] = mapped_column(
+        Enum(GNodeInstanceTransport, name="g_node_instance_transport")
+    )
+    decision: Mapped[FisAuthorizationDecision] = mapped_column(
+        Enum(FisAuthorizationDecision, name="fis_authorization_decision")
+    )
+    reason: Mapped[FisAuthorizationReason] = mapped_column(
+        Enum(FisAuthorizationReason, name="fis_authorization_reason")
+    )
+    decided_at_unix_ms: Mapped[int] = mapped_column(BigInteger, index=True)
+
+    def to_gt(self) -> FisInstanceAuthorizationEvent:
+        """Serialize SQL row → Sema GT."""
+        return FisInstanceAuthorizationEvent(
+            event_id=self.event_id,
+            principal_id=self.principal_id,
+            instance_id=self.instance_id,
+            run=self.run,
+            alias=self.alias,
+            g_node_class=self.g_node_class,
+            transport=self.transport,
+            decision=self.decision,
+            reason=self.reason,
+            decided_at_unix_ms=self.decided_at_unix_ms,
+        )
+
+    @staticmethod
+    def from_gt(gt: FisInstanceAuthorizationEvent) -> AuthEventSql:
+        """Create SQL model from a Sema GT instance (already validated)."""
+        return AuthEventSql(
+            event_id=gt.event_id,
+            principal_id=gt.principal_id,
+            instance_id=gt.instance_id,
+            run=gt.run,
+            alias=gt.alias,
+            g_node_class=gt.g_node_class,
+            transport=gt.transport,
+            decision=gt.decision,
+            reason=gt.reason,
+            decided_at_unix_ms=gt.decided_at_unix_ms,
         )

@@ -1,0 +1,14 @@
+{
+  "TypeName": "fis.instance.authorization.event",
+  "Version": "000",
+  "EventId": "8c1d2f7e-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+  "PrincipalId": "19ee09df-80ba-437b-b6c1-1eebe9d34801",
+  "InstanceId": "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa",
+  "Run": "hw1__1",
+  "Alias": "hw1.isone.me.versant.keene.beech.scada",
+  "GNodeClass": "Scada",
+  "Transport": "RabbitAmqp",
+  "Decision": "Authorized",
+  "Reason": "Superseded",
+  "DecidedAtUnixMs": 1762634100033
+}

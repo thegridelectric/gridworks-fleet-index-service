@@ -1,11 +1,14 @@
 enums:
   base.g.node.class: base.g.node.class
+  fis.authorization.decision: fis.authorization.decision
+  fis.authorization.reason: fis.authorization.reason
   g.node.instance.status: g.node.instance.status
   g.node.instance.transport: g.node.instance.transport
   g.node.status: g.node.status
 types:
   connectivity.edge.gt: connectivity.edge.gt
   fis.connect.claims: fis.connect.claims
+  fis.instance.authorization.event: fis.instance.authorization.event
   g.node.forest: g.node.forest
   g.node.forest.request: g.node.forest.request
   g.node.gt: g.node.gt

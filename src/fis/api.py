@@ -25,11 +25,14 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
+from fis.auth_event import record_auth_event
 from fis.db.session import SessionLocal
 from fis.gate import (
     Decision,
+    GateResult,
     decide_resource,
     decide_topic,
     decide_user,
@@ -112,10 +115,13 @@ def create_app(
         params = await _form_and_query(request)
         req = parse_user_request(params)
         if req is None:
+            # No typed request to record against: the claims did not decode.
             logger.info("auth/user deny: malformed request")
             return PlainTextResponse(Decision.Deny.value)
+        result: GateResult | None = None
 
         def run() -> str:
+            nonlocal result
             with SessionLocal() as session:
                 result = decide_user(
                     session,
@@ -134,8 +140,15 @@ def create_app(
             )
             return result.decision.value
 
+        def record() -> None:
+            assert result is not None  # set by run() before the response
+            with SessionLocal() as session:
+                record_auth_event(session, req, result)
+
         body = await run_in_threadpool(run)
-        return PlainTextResponse(body)
+        # The verdict goes back first; the audit record rides a background
+        # task so the gate's latency carries no second database write.
+        return PlainTextResponse(body, background=BackgroundTask(record))
 
     @app.api_route("/auth/vhost", methods=["GET", "POST"])
     async def auth_vhost(request: Request) -> PlainTextResponse:

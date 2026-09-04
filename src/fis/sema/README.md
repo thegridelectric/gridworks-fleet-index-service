@@ -7,7 +7,10 @@ brokers only. It MUST NOT be used against hybrid or production brokers.
 
 Staging words in this snapshot:
 
+- enum fis.authorization.decision:000
+- enum fis.authorization.reason:000
 - type fis.connect.claims:000
+- type fis.instance.authorization.event:000
 - type g.node.instance.gt:001
 
 When these words promote to published, rebuild without `--allow-staged` to

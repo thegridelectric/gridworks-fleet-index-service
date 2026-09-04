@@ -1,6 +1,6 @@
 metadata:
   registry_version: "1.0"
-  last_updated: "2026-08-16T16:30:00Z"
+  last_updated: "2026-09-04T14:40:00Z"
   maintainer: "gridworks-energy"
 
 formats:
@@ -14,7 +14,7 @@ formats:
   non.empty.string:
     owner: gridworks-energy
     schema_url: "https://schemas.electricity.works/formats/non.empty.string"
-    created: "2024-12-31T15:00:00Z"
+    created: "2024-09-02T15:00:00Z"
     status: "published"
     description: "String with at least one character"
 
@@ -51,6 +51,30 @@ enums:
         schema_url: "https://schemas.electricity.works/enums/base.g.node.class/000"
         created: "2026-02-22T16:43:00Z"
         status: "published"
+
+  fis.authorization.decision:
+    latest_version: "000"
+    owner: jessica-millar
+    enum_type: "versioned"
+    description: "Authorization outcome determined by the Fleet Index Service (FIS) for a runtime instance connection attempt."
+
+    versions:
+      "000":
+        schema_url: "https://schemas.electricity.works/enums/fis.authorization.decision/000"
+        created: "2026-09-04T14:40:00Z"
+        status: "staging"
+
+  fis.authorization.reason:
+    latest_version: "000"
+    owner: jessica-millar
+    enum_type: "versioned"
+    description: "Why the Fleet Index Service (FIS) decided a runtime instance connection attempt as it did; each value implies one fis.authorization.decision."
+
+    versions:
+      "000":
+        schema_url: "https://schemas.electricity.works/enums/fis.authorization.reason/000"
+        created: "2026-09-04T14:40:00Z"
+        status: "staging"
 
   g.node.instance.status:
     latest_version: "000"
@@ -123,6 +147,29 @@ types:
             - "left.right.dot"
             - "non.empty.string"
             - "universe.run"
+            - "uuid4.str"
+
+  fis.instance.authorization.event:
+    latest_version: "000"
+    owner: jessica-millar
+    versioning_strategy: "literal"
+    description: "Record of one connect-gate decision by the Fleet Index Service (FIS): whether a runtime instance of a principal was admitted to a run, and why."
+
+    versions:
+      "000":
+        schema_url: "https://schemas.electricity.works/types/fis.instance.authorization.event/000"
+        created: "2026-09-04T14:40:00Z"
+        summary: "Initial Sema version"
+        status: "staging"
+        direct_dependencies:
+          structural:
+            - "fis.authorization.decision:000"
+            - "fis.authorization.reason:000"
+            - "g.node.instance.transport:000"
+            - "left.right.dot"
+            - "non.empty.string"
+            - "universe.run"
+            - "utc.milliseconds"
             - "uuid4.str"
 
   g.node.forest:

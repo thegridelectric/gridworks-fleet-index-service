@@ -19,6 +19,11 @@ types:
     versioning_strategy: literal
     versions:
       '000': definitions/types/fis.connect.claims/000.yaml
+  fis.instance.authorization.event:
+    latest_version: '000'
+    versioning_strategy: literal
+    versions:
+      '000': definitions/types/fis.instance.authorization.event/000.yaml
   g.node.forest:
     latest_version: '002'
     versioning_strategy: literal
@@ -45,6 +50,16 @@ enums:
     latest_version: '000'
     versions:
       '000': definitions/enums/base.g.node.class/000.yaml
+  fis.authorization.decision:
+    enum_type: versioned
+    latest_version: '000'
+    versions:
+      '000': definitions/enums/fis.authorization.decision/000.yaml
+  fis.authorization.reason:
+    enum_type: versioned
+    latest_version: '000'
+    versions:
+      '000': definitions/enums/fis.authorization.reason/000.yaml
   g.node.instance.status:
     enum_type: versioned
     latest_version: '000'
