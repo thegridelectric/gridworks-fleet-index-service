@@ -49,9 +49,9 @@ class GNodeSql(Base):
     """A GNode as the registry currently describes it — strict bijection with
     `g.node.gt`.
 
-    Seeded through the registry's read façade and kept current from its
-    forest broadcasts, with the periodic snapshot broadcast healing a missed
-    or corrupted mirror. FIS reads two things from it: whether a claimed
+    Fed only through the registry's HTTP read façade: a whole-universe
+    forest pulled at boot and on an interval, and a single node read through
+    on a gate miss. FIS reads two things from it: whether a claimed
     alias matches the identity connecting, and whether that identity is a
     GNode the registry still knows.
 
@@ -136,7 +136,10 @@ class PrincipalStatus(enum.StrEnum):
 
 
 class PrincipalSql(Base):
-    """A durable identity that may hold leases.
+    """A durable identity that may hold leases: a core piece of the
+    GridWorks platform allowed to connect to the broker — a GNode in the
+    grid topology (a scada, a leaf transactive node, a market maker) or a
+    Service outside it (the grid-node-registry, the ear, the journalkeeper).
 
     Keyed on the **cert subject**, which is the identity itself: for a GNode
     the CN is its GNodeId, so the GNodeId *is* the principal id and there is

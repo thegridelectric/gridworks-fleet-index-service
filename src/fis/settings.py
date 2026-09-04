@@ -81,3 +81,25 @@ class RabbitMgmtSettings(BaseSettings):
         env_nested_delimiter="__",
         extra="ignore",
     )
+
+
+class GnrSettings(BaseSettings):
+    """Where FIS reads the grid-node-registry, and how often it reconciles.
+
+    The mirror is fed over gnr's public read façade — never gnr's Postgres,
+    never rabbit. The default is a registry on this machine (its façade
+    binds 8000), which is the dev universe; a deployed box's `.env` points at
+    its universe's registry. The reconcile interval bounds how stale the
+    mirror can be when gnr's push (build step 5c) is missed.
+    """
+
+    url: str = "http://localhost:8000"
+    reconcile_s: int = 300
+    timeout_s: float = 5.0
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="fis_gnr_",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )

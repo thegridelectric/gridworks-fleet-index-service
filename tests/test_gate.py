@@ -60,21 +60,44 @@ class FakeKiller:
         self.calls.append((principal_id, vhost))
         return self.ok
 
+    def kill_identity(self, *, principal_id: str) -> int:
+        return 0
+
+
+class FakeRegistry:
+    """Answers `get_by_id` from a fixed map and records the lookups."""
+
+    def __init__(self, known: dict[str, GNodeGt] | None = None) -> None:
+        self.known = known or {}
+        self.lookups: list[str] = []
+
+    def get_forest(self, roots):
+        raise AssertionError("the gate never pulls a forest")
+
+    def get_by_id(self, g_node_id: str) -> GNodeGt | None:
+        self.lookups.append(g_node_id)
+        return self.known.get(g_node_id)
+
+
+NO_REGISTRY = FakeRegistry()
+
+
+def _beech_gt() -> GNodeGt:
+    return GNodeGt(
+        g_node_id=BEECH_ID,
+        alias=BEECH_ALIAS,
+        base_class=BaseGNodeClass.Logical,
+        g_node_class="Scada",
+        status=GNodeStatus.Active,
+    )
+
 
 def _principal(status: PrincipalStatus = PrincipalStatus.Active) -> PrincipalSql:
     return PrincipalSql(id=BEECH_ID, kind=PrincipalKind.GNode, status=status)
 
 
 def _mirror_row() -> GNodeSql:
-    return GNodeSql.from_gt(
-        GNodeGt(
-            g_node_id=BEECH_ID,
-            alias=BEECH_ALIAS,
-            base_class=BaseGNodeClass.Logical,
-            g_node_class="Scada",
-            status=GNodeStatus.Active,
-        )
-    )
+    return GNodeSql.from_gt(_beech_gt())
 
 
 def _lease(instance_id: str, status: GNodeInstanceStatus) -> LeaseSql:
@@ -123,7 +146,7 @@ def _seed(
 
 def test_unknown_principal_denied(session) -> None:
     killer = FakeKiller()
-    result = decide_user(session, _amqp_req(), killer, universe=UNIVERSE)
+    result = decide_user(session, _amqp_req(), killer, NO_REGISTRY, universe=UNIVERSE)
     assert result == (Decision.Deny, GateReason.PrincipalNotFound)
     assert killer.calls == []
 
@@ -131,7 +154,7 @@ def test_unknown_principal_denied(session) -> None:
 def test_suspended_principal_denied(session) -> None:
     _seed(session, principal=_principal(PrincipalStatus.Suspended))
     killer = FakeKiller()
-    result = decide_user(session, _amqp_req(), killer, universe=UNIVERSE)
+    result = decide_user(session, _amqp_req(), killer, NO_REGISTRY, universe=UNIVERSE)
     assert result == (Decision.Deny, GateReason.PrincipalSuspended)
     assert killer.calls == []
 
@@ -139,14 +162,16 @@ def test_suspended_principal_denied(session) -> None:
 def test_run_outside_this_universe_denied(session) -> None:
     _seed(session)
     killer = FakeKiller()
-    result = decide_user(session, _amqp_req(run="hw1__1"), killer, universe="d1")
+    result = decide_user(
+        session, _amqp_req(run="hw1__1"), killer, NO_REGISTRY, universe="d1"
+    )
     assert result == (Decision.Deny, GateReason.RunOutsideUniverse)
 
 
 def test_first_connect_allowed_and_leases(session) -> None:
     _seed(session)
     killer = FakeKiller(ok=True)
-    result = decide_user(session, _amqp_req(), killer, universe=UNIVERSE)
+    result = decide_user(session, _amqp_req(), killer, NO_REGISTRY, universe=UNIVERSE)
     assert result.decision is Decision.Allow
     assert result.reason is GateReason.Superseded
     # An empty kill still runs (confirming nothing remains) before admitting.
@@ -162,7 +187,9 @@ def test_reconnect_same_instance_is_idempotent(session) -> None:
     session.commit()
 
     killer = FakeKiller()
-    result = decide_user(session, _amqp_req(INSTANCE_A), killer, universe=UNIVERSE)
+    result = decide_user(
+        session, _amqp_req(INSTANCE_A), killer, NO_REGISTRY, universe=UNIVERSE
+    )
     assert result == (Decision.Allow, GateReason.LeaseMatch)
     assert killer.calls == []  # a matching lease never kills
 
@@ -173,7 +200,9 @@ def test_revoked_instance_denied_forever(session) -> None:
     session.commit()
 
     killer = FakeKiller()
-    result = decide_user(session, _amqp_req(INSTANCE_A), killer, universe=UNIVERSE)
+    result = decide_user(
+        session, _amqp_req(INSTANCE_A), killer, NO_REGISTRY, universe=UNIVERSE
+    )
     assert result == (Decision.Deny, GateReason.RevokedForever)
     assert killer.calls == []
 
@@ -185,6 +214,7 @@ def test_alias_claim_mismatch_denied(session) -> None:
         session,
         _amqp_req(alias="hw1.isone.me.versant.keene.elm.scada"),
         killer,
+        NO_REGISTRY,
         universe=UNIVERSE,
     )
     assert result == (Decision.Deny, GateReason.AliasMismatch)
@@ -195,7 +225,11 @@ def test_class_claim_mismatch_denied(session) -> None:
     _seed(session)
     killer = FakeKiller()
     result = decide_user(
-        session, _amqp_req(g_node_class="AtomicTNode"), killer, universe=UNIVERSE
+        session,
+        _amqp_req(g_node_class="AtomicTNode"),
+        killer,
+        NO_REGISTRY,
+        universe=UNIVERSE,
     )
     assert result == (Decision.Deny, GateReason.ClassMismatch)
 
@@ -203,8 +237,45 @@ def test_class_claim_mismatch_denied(session) -> None:
 def test_amqp_first_connect_requires_registry_mirror(session) -> None:
     _seed(session, mirror=False)  # principal exists, registry mirror does not
     killer = FakeKiller()
-    result = decide_user(session, _amqp_req(), killer, universe=UNIVERSE)
+    result = decide_user(session, _amqp_req(), killer, NO_REGISTRY, universe=UNIVERSE)
     assert result == (Decision.Deny, GateReason.NotInRegistry)
+
+
+def test_amqp_first_connect_reads_through_on_mirror_miss(session) -> None:
+    # Freshly provisioned: known to the registry, not yet in the mirror.
+    _seed(session, mirror=False)
+    killer = FakeKiller(ok=True)
+    registry = FakeRegistry({BEECH_ID: _beech_gt()})
+    result = decide_user(session, _amqp_req(), killer, registry, universe=UNIVERSE)
+    assert result.decision is Decision.Allow
+    assert result.reason is GateReason.Superseded
+    assert registry.lookups == [BEECH_ID]
+    assert session.get(GNodeSql, BEECH_ID).alias == BEECH_ALIAS
+
+
+def test_read_through_still_checks_the_claim(session) -> None:
+    _seed(session, mirror=False)
+    killer = FakeKiller(ok=True)
+    registry = FakeRegistry({BEECH_ID: _beech_gt()})
+    result = decide_user(
+        session,
+        _amqp_req(alias="hw1.isone.me.versant.keene.birch.scada"),
+        killer,
+        registry,
+        universe=UNIVERSE,
+    )
+    assert result.decision is Decision.Deny
+    assert result.reason is GateReason.AliasMismatch
+    assert killer.calls == []
+
+
+def test_mirror_hit_never_asks_the_registry(session) -> None:
+    _seed(session)
+    killer = FakeKiller(ok=True)
+    registry = FakeRegistry()
+    result = decide_user(session, _amqp_req(), killer, registry, universe=UNIVERSE)
+    assert result.decision is Decision.Allow
+    assert registry.lookups == []
 
 
 def test_supersession_kills_before_admitting(session) -> None:
@@ -213,7 +284,9 @@ def test_supersession_kills_before_admitting(session) -> None:
     session.commit()
 
     killer = FakeKiller(ok=True)
-    result = decide_user(session, _amqp_req(INSTANCE_B), killer, universe=UNIVERSE)
+    result = decide_user(
+        session, _amqp_req(INSTANCE_B), killer, NO_REGISTRY, universe=UNIVERSE
+    )
     assert result == (Decision.Allow, GateReason.Superseded)
     assert killer.calls == [(BEECH_ID, RUN)]
 
@@ -230,7 +303,9 @@ def test_unconfirmed_kill_fails_closed(session) -> None:
     session.commit()
 
     killer = FakeKiller(ok=False)
-    result = decide_user(session, _amqp_req(INSTANCE_B), killer, universe=UNIVERSE)
+    result = decide_user(
+        session, _amqp_req(INSTANCE_B), killer, NO_REGISTRY, universe=UNIVERSE
+    )
     assert result == (Decision.Deny, GateReason.KillUnconfirmed)
 
     # The predecessor keeps its Active lease; the successor was never created.
@@ -251,7 +326,7 @@ def test_mqtt_first_connect_allowed_without_alias_check(session) -> None:
         g_node_class=None,
     )
     killer = FakeKiller(ok=True)
-    result = decide_user(session, req, killer, universe=UNIVERSE)
+    result = decide_user(session, req, killer, NO_REGISTRY, universe=UNIVERSE)
     assert result.decision is Decision.Allow
     lease = session.get(LeaseSql, INSTANCE_A)
     assert lease.transport is GNodeInstanceTransport.RabbitMqtt

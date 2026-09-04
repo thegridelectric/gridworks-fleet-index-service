@@ -36,6 +36,8 @@ from fis.db.models import (
     PrincipalSql,
     PrincipalStatus,
 )
+from fis.gnr_client import RegistryReader
+from fis.mirror import apply_gnode
 from fis.rabbit_admin import ConnectionKiller
 from fis.sema.codec import default_codec
 from fis.sema.enums import GNodeInstanceStatus, GNodeInstanceTransport
@@ -173,6 +175,7 @@ def decide_user(
     session: Session,
     req: UserAuthRequest,
     killer: ConnectionKiller,
+    registry: RegistryReader,
     *,
     universe: str,
 ) -> GateResult:
@@ -181,6 +184,11 @@ def decide_user(
     Malformed is handled upstream in `parse_user_request`; here we assume a
     well-formed request and decide: principal status, then lease state, then
     — on a never-seen instance — synchronous supersession before allowing.
+
+    A GNode the mirror does not know is read through from the registry
+    before the alias/class check, so a freshly provisioned node connecting
+    ahead of the next reconcile is admitted on its first try. A registry
+    that does not know it, or cannot be reached, admits nothing new.
     """
     if not req.run.startswith(f"{universe}__"):
         return _deny(GateReason.RunOutsideUniverse)
@@ -210,7 +218,12 @@ def decide_user(
     if req.transport == GNodeInstanceTransport.RabbitAmqp:
         gnode = session.get(GNodeSql, req.principal_id)
         if gnode is None:
-            return _deny(GateReason.NotInRegistry)
+            fetched = registry.get_by_id(req.principal_id)
+            if fetched is None:
+                return _deny(GateReason.NotInRegistry)
+            apply_gnode(session, fetched, killer)
+            gnode = session.get(GNodeSql, req.principal_id)
+            assert gnode is not None  # apply_gnode just inserted it
         if req.alias != gnode.alias:
             return _deny(GateReason.AliasMismatch)
         if req.g_node_class != gnode.g_node_class:

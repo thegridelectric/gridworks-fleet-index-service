@@ -40,10 +40,16 @@ working rules.
 
 ```
 src/fis/
-  api.py        the HTTP surface the broker's auth backend calls
-  cli.py        the `fis` console script
-  settings.py   deploy config — one .env, one FIS_ prefix
-  db/           engine + session factory
+  api.py           the HTTP surface the broker's auth backend calls; its
+                   lifespan runs the registry reconcile
+  gate.py          the /auth verdicts
+  mirror.py        applying registry snapshots to the mirror
+  gnr_client.py    reading the grid-node-registry over its HTTP read façade
+  rabbit_admin.py  closing connections through the broker's management API
+  cli.py           the `fis` console script (`api`, `principal`)
+  principals.py    minting and administering principals
+  settings.py      deploy config — one .env, one FIS_ prefix
+  db/              models, engine + session factory
 ```
 
 ## Running it
@@ -65,6 +71,35 @@ second place to keep the connection string in sync.
 
 `FIS_UNIVERSE` takes the bare universe token (`hw1`), not the broker vhost
 (`hw1__2`, which is `<universe>__<run>`); the vhost form is rejected at boot.
+
+FIS mirrors its universe's grid-node-registry over the registry's HTTP read
+façade (`FIS_GNR_URL`, default a registry on this machine): the whole
+universe is pulled at boot and every `FIS_GNR_RECONCILE_S` seconds, and a
+GNode the mirror does not yet know is looked up by id when it first
+connects. The registry being unreachable never stops FIS — it keeps
+serving the mirror it has.
+
+## Principals
+
+A principal is a durable identity that belongs to a core piece of the
+GridWorks platform and is allowed to connect to the broker. It comes in
+two kinds. A **GNode** principal is a node in the grid topology: a house's
+scada, the leaf transactive node that bids for it, a market maker. Its id
+is its GNodeId, the same id the registry holds. A **Service** principal is
+platform infrastructure that is not a node in the topology: the
+grid-node-registry, the ear that audits the broker, the journalkeeper that
+persists what the fleet says, the weather forecast service. Its id is a
+UUID that FIS mints. In both cases the id is the certificate's CN, and the
+row is created before the certificate is cut, so the two can never
+disagree:
+
+```bash
+uv run fis principal create --kind Service --display-name gnr   # prints the id
+uv run fis principal create --kind GNode --g-node-id <GNodeId>
+gwcert key add --common-name <id>                               # on certbot
+uv run fis principal list
+uv run fis principal suspend <id>    # emergency eviction; `activate` lifts it
+```
 
 ## Development
 

@@ -9,11 +9,19 @@ the only client is the broker, and the contract is
 `/auth/user` lands here with the gate (build step 3). The response is
 plain-text `allow`/`deny` — the stock http backend's contract, not JSON.
 `/auth/{vhost,resource,topic}` follow with build step 4.
+
+The app's lifespan owns the registry reconcile (build step 5b): a background
+task that seeds the mirror from gnr at boot and re-pulls on an interval.
+Boot never waits on gnr — an unreachable registry is a logged warning and
+the last-known mirror serves.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
@@ -28,8 +36,10 @@ from fis.gate import (
     decide_vhost,
     parse_user_request,
 )
+from fis.gnr_client import RegistryReader, default_registry
+from fis.mirror import reconcile_once
 from fis.rabbit_admin import ConnectionKiller, default_killer
-from fis.settings import Settings
+from fis.settings import GnrSettings, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +58,50 @@ async def _form_and_query(request: Request) -> dict[str, str]:
 
 
 def create_app(
-    killer: ConnectionKiller | None = None, universe: str | None = None
+    killer: ConnectionKiller | None = None,
+    universe: str | None = None,
+    registry: RegistryReader | None = None,
+    *,
+    reconcile: bool = True,
 ) -> FastAPI:
-    app = FastAPI(title="Fleet Index Service")
-
-    # Resolved once at app build. Tests pass a fake killer + universe; the
-    # running service resolves both from the box's settings.
+    # Resolved once at app build. Tests pass a fake killer, registry and
+    # universe, and switch the reconcile loop off; the running service
+    # resolves all of it from the box's settings.
     resolved_universe = universe if universe is not None else Settings().universe
 
     def get_killer() -> ConnectionKiller:
         return killer if killer is not None else default_killer()
+
+    def get_registry() -> RegistryReader:
+        return registry if registry is not None else default_registry()
+
+    async def reconcile_loop(interval_s: int) -> None:
+        while True:
+            await run_in_threadpool(
+                reconcile_once,
+                SessionLocal,
+                get_registry(),
+                get_killer(),
+                universe=resolved_universe,
+            )
+            await asyncio.sleep(interval_s)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        task = (
+            asyncio.create_task(reconcile_loop(GnrSettings().reconcile_s))
+            if reconcile
+            else None
+        )
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+    app = FastAPI(title="Fleet Index Service", lifespan=lifespan)
 
     @app.get("/ping")
     def ping() -> dict:
@@ -74,7 +118,11 @@ def create_app(
         def run() -> str:
             with SessionLocal() as session:
                 result = decide_user(
-                    session, req, get_killer(), universe=resolved_universe
+                    session,
+                    req,
+                    get_killer(),
+                    get_registry(),
+                    universe=resolved_universe,
                 )
             logger.info(
                 "auth/user %s (%s) principal=%s run=%s instance=%s",
