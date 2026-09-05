@@ -1,15 +1,42 @@
-"""Closing a superseded instance's broker connections via the management API.
+"""Closing a superseded instance's broker connections, and confirming it.
 
 The gate's synchronous supersession (build step 3) must *confirm* that no
-connection remains for a (principal, run) before it admits a successor — "an
-empty kill is success". That confirmation is a management-API round trip
-against the broker on the same box; this module is the only thing in FIS that
-talks to the broker rather than to Postgres.
+connection remains for an identity before it admits a successor — "an empty
+kill is success". Both halves are management-API calls against the broker
+on the same box, and this module is the only thing in FIS that talks to the
+broker rather than to Postgres:
 
-`ConnectionKiller` is a `Protocol` so the gate runs against a fake in the dev
-battery and against a real broker only on staging — the verification that
-counts. `RabbitMgmtKiller` is the real implementation; `default_killer()`
-builds it from settings for the running service.
+- the **kill** is `DELETE /api/connections/username/<principal-id>`. The
+  broker applies it to live connection state, so it closes a connection the
+  management *listing* has not yet seen (the listing is served from the
+  stats database and lags by up to its collection interval). It is
+  broker-wide for the identity, which is exact while a broker hosts one run.
+- the **confirm** polls `GET /api/connections/username/<principal-id>`
+  until the identity holds no connection. The broker serves that view from
+  its connection-tracking table — its own record of established
+  connections, the same table the close acts on — not from the stats
+  database, and it answers without asking any connection process, so a
+  connection still mid-handshake (the successor itself) is neither counted
+  nor consulted. The listing gates no safety decision, neither to find nor
+  to confirm.
+- the close is **two-phase** because it returns before the sockets are
+  gone and a predecessor may never let them go. The broker sends
+  `Connection.Close` and waits for the client's `Close-Ok` before it tears
+  the reader down; a responsive client answers within milliseconds, but a
+  wedged one never does and the reader sits in its closing state (routing
+  nothing, so the successor is safe, but still tracked) until the broker's
+  30 s close timeout. A second close on a reader already closing forces it
+  down at once (the reader's `terminate` is forced whenever the connection
+  is not running), so the kill waits a short grace for the close-ok, closes
+  again to force any straggler, and only then confirms. Even forced, a
+  reader whose peer is not reading lingers about 5 s in the TLS socket
+  close (OTP waits that long for a close_notify the peer never sends),
+  which the confirm budget must cover.
+
+`ConnectionKiller` is a `Protocol` so the gate runs against a fake in the
+handler tests; `RabbitMgmtKiller` is the real implementation, exercised by
+the dev battery and, as the verification that counts, on staging.
+`default_killer()` builds it from settings for the running service.
 """
 
 from __future__ import annotations
@@ -26,40 +53,42 @@ from fis.settings import RabbitMgmtSettings
 
 logger = logging.getLogger(__name__)
 
+# How long a predecessor gets to answer the broker's Connection.Close before
+# the kill forces it. A live client answers in milliseconds; the grace only
+# spares a healthy one the forced teardown and bounds how long a wedged one
+# delays its successor.
+CLOSE_OK_GRACE_S = 1.0
+
 
 class ConnectionKiller(Protocol):
     def kill(self, *, principal_id: str, vhost: str) -> bool:
-        """Close every broker connection for this identity on this vhost and
-        confirm none remain.
+        """Close every broker connection for this identity and confirm none
+        remain.
 
         Returns `True` on a confirmed-empty result — including the no-op case,
         since nothing to close is success (every restart is a supersession and
-        a clean stop leaves nothing behind). Returns `False` if the management
-        API could not be reached or the kill could not be confirmed; the gate
-        reads `False` as fail-closed and denies the successor.
+        a clean stop leaves nothing behind). Returns `False` if the kill could
+        not be issued or could not be confirmed within the budget; the gate
+        reads `False` as fail-closed and denies the successor. `vhost` is the
+        run the successor claimed; the close is broker-wide for the identity.
         """
         ...
 
     def kill_identity(self, *, principal_id: str) -> int:
         """Close every connection for this identity across all vhosts, and
-        return how many were closed.
+        return how many were live when the close was issued.
 
         This is the reconvergence flush behind a registry rename: it is not
         gated on confirmation the way `kill` is (the reconnect re-authorizes
-        against the new alias), so it is best-effort — a management-API
-        failure is logged, not fatal.
+        against the new alias), so it is best-effort — a broker failure is
+        logged, not fatal.
         """
         ...
 
 
 class RabbitMgmtKiller:
-    """Kills connections through `rabbitmq_management`'s HTTP API.
-
-    Connections carry the authenticated `user` (the cert CN = principal id)
-    and their `vhost`, so a (principal, run) is exactly the set with a
-    matching `user` and `vhost`. There is at most one authorized instance per
-    that key, so closing all of them closes the predecessor and nothing else.
-    """
+    """Kills and confirms through the management API's by-username
+    connection resource (see the module docstring for why that one)."""
 
     def __init__(
         self,
@@ -67,85 +96,88 @@ class RabbitMgmtKiller:
         username: str,
         password: str,
         timeout: float = 5.0,
-        confirm_s: float = 2.0,
+        confirm_s: float = 8.0,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth = (username, password)
         self.timeout = timeout
-        self.confirm_s = confirm_s  # how long to wait for the listing to empty
+        self.confirm_s = confirm_s  # budget for the broker to drop the sockets
+        self.transport = transport  # tests inject a mock; None → real HTTP
 
-    def _targets(
-        self, client: httpx.Client, principal_id: str, vhost: str
-    ) -> list[str]:
-        resp = client.get(f"{self.base_url}/api/connections")
+    def by_username(self, principal_id: str) -> str:
+        return (
+            f"{self.base_url}/api/connections/username/{quote(principal_id, safe='')}"
+        )
+
+    def close(self, client: httpx.Client, principal_id: str, reason: str) -> None:
+        resp = client.delete(
+            self.by_username(principal_id), headers={"X-Reason": reason}
+        )
         resp.raise_for_status()
-        return [
-            conn["name"]
-            for conn in resp.json()
-            if conn.get("user") == principal_id and conn.get("vhost") == vhost
-        ]
+
+    def live_count(self, client: httpx.Client, principal_id: str) -> int:
+        """How many established connections the broker tracks for this
+        identity. Raises on anything but a clean answer: the caller decides
+        what an unknown answer means (the gate fails closed)."""
+        resp = client.get(self.by_username(principal_id))
+        resp.raise_for_status()
+        return len(resp.json())
+
+    def drain(self, client: httpx.Client, principal_id: str, deadline: float) -> int:
+        """Poll until the identity holds no connection or the deadline
+        passes; the count still held."""
+        while True:
+            remaining = self.live_count(client, principal_id)
+            if remaining == 0 or time.monotonic() >= deadline:
+                return remaining
+            time.sleep(0.1)
 
     def kill(self, *, principal_id: str, vhost: str) -> bool:
         try:
-            with httpx.Client(auth=self.auth, timeout=self.timeout) as client:
-                for name in self._targets(client, principal_id, vhost):
-                    resp = client.delete(
-                        f"{self.base_url}/api/connections/{quote(name, safe='')}",
-                        headers={"X-Reason": "fis-supersession"},
-                    )
-                    resp.raise_for_status()
-                # The DELETE closes the connection, but the management
-                # database drops it only when the connection_closed event is
-                # processed, so a listing taken at once still shows it. Poll
-                # briefly; the budget stays well inside the broker's 10 s
-                # handshake timeout that bounds the whole gate.
+            with httpx.Client(
+                auth=self.auth, timeout=self.timeout, transport=self.transport
+            ) as client:
+                self.close(client, principal_id, "fis-supersession")
+                # The 204 means the broker accepted the close, not that the
+                # sockets are gone. Give a responsive predecessor its grace
+                # to answer the close, then force whatever is still closing,
+                # and confirm inside a budget that keeps the whole gate
+                # under the broker's 10 s handshake timeout.
                 deadline = time.monotonic() + self.confirm_s
-                while True:
-                    remaining = self._targets(client, principal_id, vhost)
-                    if not remaining or time.monotonic() >= deadline:
-                        break
-                    time.sleep(0.05)
+                grace = min(deadline, time.monotonic() + CLOSE_OK_GRACE_S)
+                remaining = self.drain(client, principal_id, grace)
+                if remaining:
+                    self.close(client, principal_id, "fis-supersession-force")
+                    remaining = self.drain(client, principal_id, deadline)
         except Exception as e:  # noqa: BLE001 -- any failure is "unconfirmed" → fail closed
             logger.warning(
-                "supersession kill failed for %s on %s: %s", principal_id, vhost, e
+                "supersession kill failed for %s (run %s): %s", principal_id, vhost, e
             )
             return False
 
         if remaining:
             logger.warning(
-                "supersession kill unconfirmed: %d connection(s) remain for %s on %s",
-                len(remaining),
+                "supersession kill unconfirmed: %d connection(s) remain for %s "
+                "after %.1fs (run %s)",
+                remaining,
                 principal_id,
+                self.confirm_s,
                 vhost,
             )
             return False
         return True
 
     def kill_identity(self, *, principal_id: str) -> int:
-        killed = 0
         try:
-            with httpx.Client(auth=self.auth, timeout=self.timeout) as client:
-                resp = client.get(f"{self.base_url}/api/connections")
-                resp.raise_for_status()
-                names = [
-                    conn["name"]
-                    for conn in resp.json()
-                    if conn.get("user") == principal_id
-                ]
-                for name in names:
-                    resp = client.delete(
-                        f"{self.base_url}/api/connections/{quote(name, safe='')}",
-                        headers={"X-Reason": "fis-reconvergence"},
-                    )
-                    resp.raise_for_status()
-                    killed += 1
+            with httpx.Client(
+                auth=self.auth, timeout=self.timeout, transport=self.transport
+            ) as client:
+                killed = self.live_count(client, principal_id)
+                self.close(client, principal_id, "fis-reconvergence")
         except Exception as e:  # noqa: BLE001 -- best-effort flush; log and move on
-            logger.warning(
-                "reconvergence kill failed for %s after %d closed: %s",
-                principal_id,
-                killed,
-                e,
-            )
+            logger.warning("reconvergence kill failed for %s: %s", principal_id, e)
+            return 0
         return killed
 
 
@@ -157,4 +189,5 @@ def default_killer() -> RabbitMgmtKiller:
         base_url=cfg.mgmt_url,
         username=cfg.mgmt_user.get_secret_value(),
         password=cfg.mgmt_password.get_secret_value(),
+        confirm_s=cfg.confirm_s,
     )

@@ -34,9 +34,13 @@ def pg_url() -> Iterator[str]:
     except ImportError:  # pragma: no cover - depends on the installed extra
         pytest.skip("no FIS_TEST_PG_URL and testcontainers not installed")
 
+    # The container is stopped by the context manager; ryuk, testcontainers'
+    # reaper sidecar, adds nothing here and cannot mount the Docker socket
+    # on Docker Desktop for Mac, which would skip every db test.
+    os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
     try:
         with PostgresContainer("postgres:16") as postgres:
-            yield postgres.get_connection_url()
+            yield postgres.get_connection_url(driver="psycopg")
     except Exception as e:  # noqa: BLE001 -- Docker not available / image pull failed
         pytest.skip(f"could not start a testcontainers Postgres: {e}")
 

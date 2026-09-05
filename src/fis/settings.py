@@ -63,17 +63,24 @@ class ApiRunSettings(BaseSettings):
 
 class RabbitMgmtSettings(BaseSettings):
     """Where FIS reaches the broker's management API for the supersession
-    connection-kill. Colocated by design, so localhost by default.
+    kill: closing an identity's connections and confirming they are gone.
+    Colocated by design, so localhost by default.
 
     The defaults are the dev broker (`gw-dev-rabbit` management UI on 15672).
     A deployed box overrides the credentials from its `.env`
     (`FIS_RABBIT_MGMT_USER` / `FIS_RABBIT_MGMT_PASSWORD`), which provisioning
-    writes; they are never committed.
+    writes; they are never committed. `confirm_s` bounds how long the gate
+    waits for the broker to drop the predecessor's sockets before it fails
+    closed; connect latency is acceptable, two live instances are not. The
+    default covers a wedged TLS predecessor (the forced close plus the
+    broker's 5 s wait for a close_notify the peer never sends) inside the
+    broker's 10 s handshake timeout.
     """
 
     mgmt_url: str = "http://localhost:15672"
     mgmt_user: SecretStr = SecretStr("guest")
     mgmt_password: SecretStr = SecretStr("guest")
+    confirm_s: float = 8.0
 
     model_config = SettingsConfigDict(
         env_file=".env",
