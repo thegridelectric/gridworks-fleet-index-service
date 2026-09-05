@@ -22,12 +22,14 @@ from fis.db.models import (
 from fis.gate import (
     Decision,
     GateReason,
+    GateResult,
     UserAuthRequest,
     decide_resource,
     decide_topic,
     decide_user,
     decide_vhost,
     parse_user_request,
+    user_response,
 )
 from fis.sema.enums import (
     BaseGNodeClass,
@@ -335,28 +337,40 @@ def test_mqtt_first_connect_allowed_without_alias_check(session) -> None:
 # --- /auth/vhost -----------------------------------------------------------
 
 
-def test_vhost_run_matches_vhost_allowed(session) -> None:
-    _seed(session)
-    session.add(_lease(INSTANCE_A, GNodeInstanceStatus.Active))
-    session.commit()
-    result = decide_vhost(session, username=BEECH_ID, vhost=RUN)
+def test_user_allow_carries_run_as_tag() -> None:
+    req = UserAuthRequest(
+        principal_id=BEECH_ID,
+        transport=GNodeInstanceTransport.RabbitAmqp,
+        instance_id=INSTANCE_A,
+        run=RUN,
+        alias=BEECH_ALIAS,
+        g_node_class="Scada",
+    )
+    allow = GateResult(Decision.Allow, GateReason.LeaseMatch)
+    deny = GateResult(Decision.Deny, GateReason.RevokedForever)
+    assert user_response(allow, req) == f"allow {RUN}"
+    assert user_response(deny, req) == "deny"
+
+
+def test_vhost_tag_matches_vhost_allowed() -> None:
+    result = decide_vhost(tags=RUN, vhost=RUN)
     assert result == (Decision.Allow, GateReason.VhostRunMatch)
 
 
-def test_vhost_claimed_run_ne_vhost_denied(session) -> None:
-    # Lease was created on hw1__1 (the claimed run); the connection opens
-    # hw1__2 → no active lease there → deny.
-    _seed(session)
-    session.add(_lease(INSTANCE_A, GNodeInstanceStatus.Active))
-    session.commit()
-    result = decide_vhost(session, username=BEECH_ID, vhost="hw1__2")
+def test_vhost_claimed_run_ne_vhost_denied() -> None:
+    # The connection claimed hw1__1 at /auth/user (its tag) and opens hw1__2.
+    # No lease is consulted, so an identity already live on hw1__2 changes
+    # nothing (dev-battery Finding B).
+    result = decide_vhost(tags=RUN, vhost="hw1__2")
     assert result == (Decision.Deny, GateReason.VhostRunMismatch)
 
 
-def test_vhost_no_lease_denied(session) -> None:
-    _seed(session)
-    result = decide_vhost(session, username=BEECH_ID, vhost=RUN)
-    assert result == (Decision.Deny, GateReason.VhostRunMismatch)
+def test_vhost_no_run_tag_denied() -> None:
+    # A connection without exactly one tag, the run, did not pass this gate.
+    assert decide_vhost(tags="", vhost=RUN).decision is Decision.Deny
+    assert (
+        decide_vhost(tags=f"{RUN} administrator", vhost=RUN).decision is Decision.Deny
+    )
 
 
 # --- /auth/resource --------------------------------------------------------

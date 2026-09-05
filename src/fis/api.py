@@ -38,6 +38,7 @@ from fis.gate import (
     decide_user,
     decide_vhost,
     parse_user_request,
+    user_response,
 )
 from fis.gnr_client import RegistryReader, default_registry
 from fis.mirror import reconcile_once
@@ -138,7 +139,7 @@ def create_app(
                 req.run,
                 req.instance_id,
             )
-            return result.decision.value
+            return user_response(result, req)
 
         def record() -> None:
             assert result is not None  # set by run() before the response
@@ -155,20 +156,17 @@ def create_app(
         params = await _form_and_query(request)
         username = params.get("username", "")
         vhost = params.get("vhost", "")
-
-        def run() -> str:
-            with SessionLocal() as session:
-                result = decide_vhost(session, username=username, vhost=vhost)
-            logger.info(
-                "auth/vhost %s (%s) principal=%s vhost=%s",
-                result.decision.value,
-                result.reason.value,
-                username,
-                vhost,
-            )
-            return result.decision.value
-
-        return PlainTextResponse(await run_in_threadpool(run))
+        tags = params.get("tags", "")
+        result = decide_vhost(tags=tags, vhost=vhost)
+        logger.info(
+            "auth/vhost %s (%s) principal=%s vhost=%s tags=%r",
+            result.decision.value,
+            result.reason.value,
+            username,
+            vhost,
+            tags,
+        )
+        return PlainTextResponse(result.decision.value)
 
     @app.api_route("/auth/resource", methods=["GET", "POST"])
     async def auth_resource() -> PlainTextResponse:

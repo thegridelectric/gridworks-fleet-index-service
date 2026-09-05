@@ -13,8 +13,7 @@ broker is reserved for staging, the verification that counts.
 
 Response contract: the stock `rabbitmq_auth_backend_http` backend wants a
 **plain-text** `allow`/`deny` body, not JSON — so `Decision.value` is exactly
-that string. (The FIS executor spec's `{"result": "allow"}` mapping predates
-this source-read and needs correcting.)
+that string, and `user_response` appends the run tag on allow.
 """
 
 from __future__ import annotations
@@ -55,11 +54,11 @@ class Decision(enum.StrEnum):
 
 
 class GateReason(enum.StrEnum):
-    """Why the gate decided as it did — for logging now, and the auth event
-    later. FIS-internal: the broker response carries no hint channel.
-
-    → retired by the `fis.authorization.reason` enum (currently `draft`) when
-    build step 6 promotes it and wires the `fis.instance.authorization.event`.
+    """Why the gate decided as it did. FIS-internal: the broker response
+    carries no hint channel. The user-path reasons map one-to-one onto the
+    sema `fis.authorization.reason` enum where the auth event is recorded
+    (`auth_event.py`); the per-publish reasons (vhost, resource, topic) are
+    not instance authorizations and have no event.
     """
 
     Malformed = "malformed"
@@ -277,27 +276,33 @@ def decide_user(
     return _allow(GateReason.Superseded)
 
 
-def decide_vhost(session: Session, *, username: str, vhost: str) -> GateResult:
+def user_response(result: GateResult, req: UserAuthRequest) -> str:
+    """The `/auth/user` body: `deny`, or `allow <run>`.
+
+    The words after `allow` become the connection's user tags in the broker,
+    and the broker forwards them as `tags` on that connection's vhost,
+    resource, and topic calls. Tagging the connection with its claimed run is
+    the only channel that carries the claim from the user verdict to the
+    vhost check (the backend never sends claims and vhost in one request).
+    The tag is the run, never the instance id: the broker interns each
+    distinct tag as an atom, and runs are a bounded set.
+    """
+    if result.decision is Decision.Allow:
+        return f"{Decision.Allow.value} {req.run}"
+    return Decision.Deny.value
+
+
+def decide_vhost(*, tags: str, vhost: str) -> GateResult:
     """`/auth/vhost` — cross-check the claimed run against the vhost opened.
 
-    The `/auth/vhost` call carries the actual vhost but not the claims; the
-    claimed run reached FIS at `/auth/user` (which fires first) and was
-    recorded as the lease's run. So an Active lease for (principal, vhost)
-    exists iff the client's claimed run equals the vhost it is opening.
-    gwbase derives `Run` from the vhost, so an honest actor matches by
-    construction; a hand-built client claiming a different run has no lease
-    here and is denied.
+    `tags` is the broker's space-joined tag list for this connection, which
+    FIS set to the claimed run at `/auth/user` (`user_response`). Allow iff
+    it is exactly that run and it equals the vhost. gwbase derives `Run`
+    from the vhost, so an honest actor matches by construction; a client
+    claiming one run and opening another is denied, whether or not its
+    identity is live on that vhost already.
     """
-    lease = (
-        session.query(LeaseSql)
-        .filter(
-            LeaseSql.principal_id == username,
-            LeaseSql.run == vhost,
-            LeaseSql.status == GNodeInstanceStatus.Active,
-        )
-        .one_or_none()
-    )
-    if lease is None:
+    if tags.split() != [vhost]:
         return _deny(GateReason.VhostRunMismatch)
     return _allow(GateReason.VhostRunMatch)
 
