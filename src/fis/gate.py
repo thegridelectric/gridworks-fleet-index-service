@@ -214,8 +214,13 @@ def decide_user(
         # Revoked (or Ended, which FIS never writes) → denied forever.
         return _deny(GateReason.RevokedForever)
 
-    # Never-seen instance id → supersession.
-    if req.transport == GNodeInstanceTransport.RabbitAmqp:
+    # Never-seen instance id → supersession. A GNode's AMQP claims are
+    # checked against the registry first; a service principal has no
+    # registry row to check (its claims carry no GNodeClass).
+    if (
+        req.transport == GNodeInstanceTransport.RabbitAmqp
+        and principal.kind == PrincipalKind.GNode
+    ):
         gnode = session.get(GNodeSql, req.principal_id)
         if gnode is None:
             fetched = registry.get_by_id(req.principal_id)

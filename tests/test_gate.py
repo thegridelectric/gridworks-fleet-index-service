@@ -491,3 +491,29 @@ def test_parse_bad_claims_is_malformed() -> None:
 def test_parse_mqtt_bad_client_id_is_malformed() -> None:
     params = {"username": BEECH_ID, "client_id": "not-a-uuid", "vhost": RUN}
     assert parse_user_request(params) is None
+
+
+def test_service_principal_skips_registry_check(session) -> None:
+    """A service is not a GNode: its AMQP claims carry no class and there is
+    no registry row to match, so the alias/class check does not run and the
+    connect is admitted on the lease path alone."""
+    service_id = "5f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f"
+    session.add(
+        PrincipalSql(
+            id=service_id, kind=PrincipalKind.Service, status=PrincipalStatus.Active
+        )
+    )
+    session.commit()
+    killer = FakeKiller(ok=True)
+    req = UserAuthRequest(
+        principal_id=service_id,
+        transport=GNodeInstanceTransport.RabbitAmqp,
+        instance_id=INSTANCE_A,
+        run=RUN,
+        alias="d1.some.service",
+        g_node_class=None,
+    )
+    result = decide_user(session, req, killer, NO_REGISTRY, universe=UNIVERSE)
+    assert result.decision is Decision.Allow
+    assert result.reason is GateReason.Superseded
+    assert killer.calls == [(service_id, RUN)]

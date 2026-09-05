@@ -15,6 +15,7 @@ builds it from settings for the running service.
 from __future__ import annotations
 
 import logging
+import time
 from functools import lru_cache
 from typing import Protocol
 from urllib.parse import quote
@@ -61,11 +62,17 @@ class RabbitMgmtKiller:
     """
 
     def __init__(
-        self, base_url: str, username: str, password: str, timeout: float = 5.0
+        self,
+        base_url: str,
+        username: str,
+        password: str,
+        timeout: float = 5.0,
+        confirm_s: float = 2.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth = (username, password)
         self.timeout = timeout
+        self.confirm_s = confirm_s  # how long to wait for the listing to empty
 
     def _targets(
         self, client: httpx.Client, principal_id: str, vhost: str
@@ -87,7 +94,17 @@ class RabbitMgmtKiller:
                         headers={"X-Reason": "fis-supersession"},
                     )
                     resp.raise_for_status()
-                remaining = self._targets(client, principal_id, vhost)
+                # The DELETE closes the connection, but the management
+                # database drops it only when the connection_closed event is
+                # processed, so a listing taken at once still shows it. Poll
+                # briefly; the budget stays well inside the broker's 10 s
+                # handshake timeout that bounds the whole gate.
+                deadline = time.monotonic() + self.confirm_s
+                while True:
+                    remaining = self._targets(client, principal_id, vhost)
+                    if not remaining or time.monotonic() >= deadline:
+                        break
+                    time.sleep(0.05)
         except Exception as e:  # noqa: BLE001 -- any failure is "unconfirmed" → fail closed
             logger.warning(
                 "supersession kill failed for %s on %s: %s", principal_id, vhost, e
