@@ -8,6 +8,7 @@ lever.
 """
 
 import argparse
+import logging
 import sys
 
 import uvicorn
@@ -23,6 +24,12 @@ from fis.settings import ApiRunSettings
 
 
 def _run_api() -> None:
+    # The gate's verdict lines (and the mirror's, the killer's) are INFO on
+    # the standard logger; under systemd nothing else configures logging,
+    # so without this only uvicorn's access lines reach the journal.
+    logging.basicConfig(
+        level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
+    )
     run = ApiRunSettings()
     uvicorn.run("fis.api:app", host=run.api_host, port=run.api_port)
 
