@@ -101,6 +101,67 @@ uv run fis principal list
 uv run fis principal suspend <id>    # emergency eviction; `activate` lifts it
 ```
 
+## Deploying
+
+FIS runs on the broker box as a native systemd service from a clean
+checkout of a pushed `main` SHA, the same shape as the other GridWorks
+services. The `service/` directory ships the unit and the aliases; the
+box's homedir README says what runs there.
+
+Box setup, once (as root): create the `fis` login (docker group, so it can
+run the Postgres container), clone this repo into its homedir as a full
+clone on `main`, `uv sync --frozen`, copy `template.env` to `.env` and set
+the box's values, start Postgres, migrate, then install the unit:
+
+```bash
+cp /home/fis/gridworks-fleet-index-service/service/fis-api.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now fis-api
+echo '. ~/gridworks-fleet-index-service/service/bash_aliases' >> /home/fis/.bashrc
+```
+
+The `.env` values that differ from dev: `FIS_UNIVERSE` (the box's
+universe, `hw1`), `FIS_DB_URL` (the on-box Postgres, loopback), `FIS_GNR_URL`
+(the universe's registry façade, `https://gnr.electricity.works`), and the
+broker management credentials `FIS_RABBIT_MGMT_USER` /
+`FIS_RABBIT_MGMT_PASSWORD` (the broker's default user, from the same
+secret the broker's own `.env` holds). Bind stays loopback: the broker
+calls FIS on `localhost:8080` from the same box.
+
+Postgres on the box is the same `postgres:16` container as dev, started
+by hand with the data directory on the box's data mount and the password
+that `FIS_DB_URL` carries, published on loopback only:
+
+```bash
+docker run -d --name fis-postgres --restart unless-stopped \
+  -e POSTGRES_USER=fis -e POSTGRES_PASSWORD='…' -e POSTGRES_DB=fis \
+  -p 127.0.0.1:5437:5432 -v /mnt/pgdata/fis:/var/lib/postgresql/data postgres:16
+uv run alembic upgrade head
+```
+
+Boot order matters and is a rule, not a unit dependency: the broker is a
+docker-supervised container, not a systemd unit, so nothing orders it
+after FIS. With the gate overlay on, a broker that cannot reach FIS admits
+no fleet connection, so FIS is started and answers
+`curl http://127.0.0.1:8080/ping` before the overlay is applied, and
+`fisrestart` is a moment of denied connects, never a moment of admitted
+wrong ones.
+
+Operate on the box (aliases from `service/bash_aliases`; the matching
+sudoers drop-in grants exactly these):
+
+```
+fisstart / fisstop / fisrestart   # sudo systemctl … fis-api
+fisstatus                         # systemctl status fis-api
+fislog                            # journalctl -u fis-api -f (FIS logs to stdout)
+```
+
+Update the code: `FIS_HOST=<box> ./deploy.sh` from a laptop puts the box
+on the pushed tip of `main`, syncs deps, migrates, restarts, and checks
+`/ping` over ssh. A change to `service/fis-api.service` is a unit copy
+redone by root plus `systemctl daemon-reload`; a `git pull` does not change
+the live unit.
+
 ## Development
 
 `./ci.sh` runs the full gate (lint, format check, tests) — the same thing CI

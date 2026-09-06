@@ -9,10 +9,8 @@
 # The vendored tree is GENERATED — never hand-edit it; edit the seed (or the
 # sema definitions) and re-run.
 #
-# --allow-staged: fis.connect.claims is staging until it
-# promotes; the resulting snapshot carries the staging
-# marker + README banner. Once the closure is fully published the flag is
-# a no-op.
+# The whole closure is published; the snapshot carries no staging marker.
+# A future staging word in the seed needs --allow-staged on `prepare`.
 #
 # The build mechanics are the sema CLI's (`sema snapshot --help` is the
 # source of truth). The CLI refuses to run from a dirty sema checkout and
@@ -44,8 +42,8 @@ echo "==> seed:      ${SEED}"
 echo "==> package:   ${PACKAGE_NAME}"
 
 cd "${SEMA_REPO}"
-echo "==> sema snapshot prepare --allow-staged"
-uv run sema snapshot prepare --allow-staged "${SEED}"
+echo "==> sema snapshot prepare"
+uv run sema snapshot prepare "${SEED}"
 echo "==> sema snapshot build --package-name ${PACKAGE_NAME}"
 uv run sema snapshot build --package-name "${PACKAGE_NAME}"
 

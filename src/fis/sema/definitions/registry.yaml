@@ -1,6 +1,6 @@
 metadata:
   registry_version: "1.0"
-  last_updated: "2026-09-04T14:40:00Z"
+  last_updated: "2026-09-06T12:25:00Z"
   maintainer: "gridworks-energy"
 
 formats:
@@ -62,7 +62,7 @@ enums:
       "000":
         schema_url: "https://schemas.electricity.works/enums/fis.authorization.decision/000"
         created: "2026-09-04T14:40:00Z"
-        status: "staging"
+        status: "published"
 
   fis.authorization.reason:
     latest_version: "000"
@@ -74,7 +74,7 @@ enums:
       "000":
         schema_url: "https://schemas.electricity.works/enums/fis.authorization.reason/000"
         created: "2026-09-04T14:40:00Z"
-        status: "staging"
+        status: "published"
 
   g.node.instance.status:
     latest_version: "000"
@@ -141,7 +141,7 @@ types:
         schema_url: "https://schemas.electricity.works/types/fis.connect.claims/000"
         created: "2026-08-14T19:30:00Z"
         summary: "Initial Sema version"
-        status: "staging"
+        status: "published"
         direct_dependencies:
           structural:
             - "left.right.dot"
@@ -160,7 +160,7 @@ types:
         schema_url: "https://schemas.electricity.works/types/fis.instance.authorization.event/000"
         created: "2026-09-04T14:40:00Z"
         summary: "Initial Sema version"
-        status: "staging"
+        status: "published"
         direct_dependencies:
           structural:
             - "fis.authorization.decision:000"
@@ -237,7 +237,7 @@ types:
       "001":
         schema_url: "https://schemas.electricity.works/types/g.node.instance.gt/001"
         created: "2026-08-14T20:10:00Z"
-        status: "staging"
+        status: "published"
         summary: "- Run: add"
         direct_dependencies:
           structural:

@@ -1,0 +1,8 @@
+# fis convenience aliases — pure spelling over systemctl/journalctl, no logic.
+# Sourced from the fis login's ~/.bashrc at box setup; the sudoers drop-in
+# (/etc/sudoers.d/fis) grants exactly these systemctl invocations.
+alias fisstart='sudo systemctl start fis-api'
+alias fisstop='sudo systemctl stop fis-api'
+alias fisrestart='sudo systemctl restart fis-api'
+alias fisstatus='systemctl status fis-api --no-pager'
+alias fislog='journalctl -u fis-api -f'
