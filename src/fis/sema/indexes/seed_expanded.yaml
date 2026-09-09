@@ -1,6 +1,6 @@
 metadata:
   generated_from: indexes/public_registry.yaml
-  generated_at: '2026-09-06T12:37:48Z'
+  generated_at: '2026-09-09T01:52:49Z'
   note: Transitive closure of initial_targets
 initial_targets:
 - fis.connect.claims:000
