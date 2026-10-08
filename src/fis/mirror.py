@@ -5,8 +5,8 @@ Updates arrive as `g.node.gt` snapshots over gnr's HTTP read façade: a
 whole-universe `g.node.forest` pulled at boot and on an interval
 (`reconcile_once`), and a single node read through by the gate on a mirror
 miss. This module is the **apply** step: it writes a snapshot into the
-mirror and, when the write is a rename, triggers the reconvergence kill
-(build step 5); `apply_forest` loops it over a pulled forest.
+mirror and, when the write is a rename, triggers the reconvergence kill;
+`apply_forest` loops it over a pulled forest.
 
 The client that *fetches* those snapshots is `gnr_client`; keeping the
 apply here — a function over a session, a validated `GNodeGt`, and an

@@ -1,6 +1,6 @@
 """Closing a superseded instance's broker connections, and confirming it.
 
-The gate's synchronous supersession (build step 3) must *confirm* that no
+The gate's synchronous supersession must *confirm* that no
 connection remains for an identity before it admits a successor — "an empty
 kill is success". Both halves are management-API calls against the broker
 on the same box, and this module is the only thing in FIS that talks to the

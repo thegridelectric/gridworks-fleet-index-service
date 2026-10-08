@@ -97,7 +97,7 @@ class GnrSettings(BaseSettings):
     never rabbit. The default is a registry on this machine (its façade
     binds 8000), which is the dev universe; a deployed box's `.env` points at
     its universe's registry. The reconcile interval bounds how stale the
-    mirror can be when gnr's push (build step 5c) is missed.
+    mirror can be.
     """
 
     url: str = "http://localhost:8000"

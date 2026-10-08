@@ -1,15 +1,15 @@
 """The FIS authorization gate — the `/auth/user` decision.
 
-Build step 3 of stand-up-fis, and the heart of the service: given what the
-broker forwards at connect time, return the single allow/deny verdict that
+The heart of the service: given what the broker forwards at connect time,
+return the single allow/deny verdict that
 admits or refuses a broker connection, and on a never-seen instance perform
 the synchronous supersession that keeps single-writer true.
 
 The decision is a function over a DB session, a parsed request, and an
 injected `ConnectionKiller`. Keeping it here — separate from the HTTP wiring
 (`api.py`) and the management-API kill (`rabbit_admin.py`) — is what makes
-every verdict unit-testable without a live broker (the dev battery); the real
-broker is reserved for staging, the verification that counts.
+every verdict unit-testable without a live broker; the battery against a
+real broker is the verification that counts.
 
 Response contract: the stock `rabbitmq_auth_backend_http` backend wants a
 **plain-text** `allow`/`deny` body, not JSON — so `Decision.value` is exactly
@@ -197,7 +197,7 @@ def decide_user(
     *,
     universe: str,
 ) -> GateResult:
-    """The five verdicts, in order (FIS executor "`/auth/user` — the gate").
+    """The `/auth/user` verdicts, in order.
 
     Malformed is handled upstream in `parse_user_request`; here we assume a
     well-formed request and decide: principal status, then lease state, then
@@ -232,13 +232,13 @@ def decide_user(
         # Revoked (or Ended, which FIS never writes) → denied forever.
         return _deny(GateReason.RevokedForever)
 
-    # Never-seen instance id → supersession. A GNode's AMQP claims are
-    # checked against the registry first; a service principal has no
-    # registry row to check (its claims carry no GNodeClass).
-    if (
-        req.transport == GNodeInstanceTransport.RabbitAmqp
-        and principal.kind == PrincipalKind.GNode
-    ):
+    # Never-seen instance id → supersession. A GNode absent from the mirror
+    # is read through first, whatever the transport, so its first publish
+    # finds its alias (the broker caches topic verdicts per connection, so a
+    # miss at the first write would hold for the connection's life). AMQP
+    # claims are then checked against the mirror; a service principal has
+    # no registry row to check (its claims carry no GNodeClass).
+    if principal.kind == PrincipalKind.GNode:
         gnode = session.get(GNodeSql, req.principal_id)
         if gnode is None:
             fetched = registry.get_by_id(req.principal_id)
@@ -247,10 +247,11 @@ def decide_user(
             apply_gnode(session, fetched, killer)
             gnode = session.get(GNodeSql, req.principal_id)
             assert gnode is not None  # apply_gnode just inserted it
-        if req.alias != gnode.alias:
-            return _deny(GateReason.AliasMismatch)
-        if req.g_node_class != gnode.g_node_class:
-            return _deny(GateReason.ClassMismatch)
+        if req.transport == GNodeInstanceTransport.RabbitAmqp:
+            if req.alias != gnode.alias:
+                return _deny(GateReason.AliasMismatch)
+            if req.g_node_class != gnode.g_node_class:
+                return _deny(GateReason.ClassMismatch)
 
     prior = (
         session.query(LeaseSql)
@@ -327,7 +328,8 @@ def decide_vhost(*, tags: str, vhost: str) -> GateResult:
 
 
 def decide_resource() -> GateResult:
-    """`/auth/resource` — v1 allow-all (executor "Scope")."""
+    """`/auth/resource` — allow-all: exchange, queue and binding permissions
+    are not a FIS concern."""
     return _allow(GateReason.ResourceAllowed)
 
 
@@ -343,12 +345,14 @@ def decide_topic(
     """`/auth/topic` — the alias-pinning write rule; reads are allowed.
 
     A read (fired on every MQTT subscribe) is about visibility, not
-    authority, so it is allowed (OPS-420 "The read side is open"). A write is
-    authorized iff the routing key's from-alias segment equals the wire-form
-    (hyphenated) current alias of the connection's identity.
+    authority, so it is allowed. A write is authorized iff the routing key's
+    from-alias segment equals the wire-form (hyphenated) current alias of
+    the connection's identity. Any other permission is denied.
     """
-    if permission != "write":
+    if permission == "read":
         return _allow(GateReason.TopicRead)
+    if permission != "write":
+        return _deny(GateReason.TopicMalformed)
 
     # MQTT topics arrive slash-separated; the AMQP routing key is dotted.
     # Normalize so one rule covers both (aliases are hyphenated, never
@@ -361,8 +365,8 @@ def decide_topic(
     gnode = session.get(GNodeSql, username)
     if gnode is None:
         # Not a GNode in the mirror. A service principal has no registry alias
-        # to pin in v1, so its writes are allowed (it is cert-authenticated
-        # infra); anything else is denied.
+        # to pin, so its writes are allowed (it is cert-authenticated infra);
+        # anything else is denied.
         principal = session.get(PrincipalSql, username)
         if (
             principal is not None
