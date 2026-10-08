@@ -6,12 +6,12 @@ reach it. There is no CORS middleware and no public documentation audience —
 the only client is the broker, and the contract is
 `rabbitmq-auth-backend-http`'s, not a sema one.
 
-`/auth/user` lands here with the gate (build step 3). The response is
-plain-text `allow`/`deny` — the stock http backend's contract, not JSON.
-`/auth/{vhost,resource,topic}` follow with build step 4.
+`/auth/user` is the gate. The response is plain-text `allow`/`deny` — the
+stock http backend's contract, not JSON. `/auth/{vhost,resource,topic}` are
+the per-connection and per-publish checks.
 
-The app's lifespan owns the registry reconcile (build step 5b): a background
-task that seeds the mirror from gnr at boot and re-pulls on an interval.
+The app's lifespan owns the registry reconcile: a background task that
+seeds the mirror from gnr at boot and re-pulls on an interval.
 Boot never waits on gnr — an unreachable registry is a logged warning and
 the last-known mirror serves.
 """
@@ -187,7 +187,7 @@ def create_app(
 
     @app.api_route("/auth/resource", methods=["GET", "POST"])
     async def auth_resource() -> PlainTextResponse:
-        # v1 allow-all; no request state is consulted.
+        # allow-all; no request state is consulted.
         return PlainTextResponse(decide_resource().decision.value)
 
     @app.api_route("/auth/topic", methods=["GET", "POST"])

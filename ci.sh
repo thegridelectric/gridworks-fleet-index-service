@@ -1,9 +1,8 @@
 #!/bin/bash
 # Run locally everything CI runs, so a push won't go red. Usage: ./ci.sh
 #
-# The db tests arrive with the FIS schema (build step 2) and bring a
-# testcontainers Postgres with them; a docker precondition check belongs
-# here from that commit on, not before.
+# The db tests bring a testcontainers Postgres with them, so docker must
+# be running for the suite to be meaningful (without it they skip).
 set -euo pipefail
 
 step() { printf '\n=== %s ===\n' "$1"; shift; "$@"; }

@@ -318,9 +318,8 @@ def test_unconfirmed_kill_fails_closed(session) -> None:
     assert session.get(LeaseSql, INSTANCE_B) is None
 
 
-def test_mqtt_first_connect_allowed_without_alias_check(session) -> None:
-    _seed(session, mirror=False)  # MQTT does not check the mirror at connect
-    req = UserAuthRequest(
+def _mqtt_req() -> UserAuthRequest:
+    return UserAuthRequest(
         principal_id=BEECH_ID,
         transport=GNodeInstanceTransport.RabbitMqtt,
         instance_id=INSTANCE_A,
@@ -328,11 +327,35 @@ def test_mqtt_first_connect_allowed_without_alias_check(session) -> None:
         alias=None,
         g_node_class=None,
     )
+
+
+def test_mqtt_first_connect_allowed_without_alias_check(session) -> None:
+    _seed(session)  # MQTT carries no alias claim to check against the mirror
     killer = FakeKiller(ok=True)
-    result = decide_user(session, req, killer, NO_REGISTRY, universe=UNIVERSE)
+    result = decide_user(session, _mqtt_req(), killer, NO_REGISTRY, universe=UNIVERSE)
     assert result.decision is Decision.Allow
     lease = session.get(LeaseSql, INSTANCE_A)
     assert lease.transport is GNodeInstanceTransport.RabbitMqtt
+
+
+def test_mqtt_first_connect_reads_through_on_mirror_miss(session) -> None:
+    # Freshly provisioned: the mirror row is in place before the first
+    # publish, whose topic verdict the broker caches for the connection.
+    _seed(session, mirror=False)
+    killer = FakeKiller(ok=True)
+    registry = FakeRegistry({BEECH_ID: _beech_gt()})
+    result = decide_user(session, _mqtt_req(), killer, registry, universe=UNIVERSE)
+    assert result.decision is Decision.Allow
+    assert registry.lookups == [BEECH_ID]
+    assert session.get(GNodeSql, BEECH_ID).alias == BEECH_ALIAS
+
+
+def test_mqtt_first_connect_requires_registry_mirror(session) -> None:
+    _seed(session, mirror=False)
+    killer = FakeKiller()
+    result = decide_user(session, _mqtt_req(), killer, NO_REGISTRY, universe=UNIVERSE)
+    assert result == (Decision.Deny, GateReason.NotInRegistry)
+    assert killer.calls == []
 
 
 # --- /auth/vhost -----------------------------------------------------------
@@ -396,6 +419,13 @@ def test_topic_read_always_allowed(session) -> None:
     assert result == (Decision.Allow, GateReason.TopicRead)
 
 
+def test_topic_unknown_permission_denied(session) -> None:
+    result = decide_topic(
+        session, username=BEECH_ID, permission="configure", routing_key=_rj_key("x")
+    )
+    assert result == (Decision.Deny, GateReason.TopicMalformed)
+
+
 def test_topic_write_alias_match_allowed(session) -> None:
     _seed(session)
     result = decide_topic(
@@ -444,7 +474,7 @@ def test_topic_write_malformed_key_denied(session) -> None:
 
 
 def test_topic_write_service_principal_allowed(session) -> None:
-    # A service principal (no registry alias) is allowed to write in v1.
+    # A service principal (no registry alias) is allowed to write.
     session.add(
         PrincipalSql(
             id=SERVICE_ID, kind=PrincipalKind.Service, status=PrincipalStatus.Active
