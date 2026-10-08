@@ -18,11 +18,11 @@ enums:
   fis.authorization.decision:
     '000':
       used_by:
-      - fis.instance.authorization.event:000
+      - fis.instance.authorization.event:001
   fis.authorization.reason:
     '000':
       used_by:
-      - fis.instance.authorization.event:000
+      - fis.instance.authorization.event:001
   g.node.instance.status:
     '000':
       used_by:
@@ -30,7 +30,7 @@ enums:
   g.node.instance.transport:
     '000':
       used_by:
-      - fis.instance.authorization.event:000
+      - fis.instance.authorization.event:001
       - g.node.instance.gt:001
   g.node.status:
     '000':
@@ -41,29 +41,29 @@ formats:
   left.right.dot:
     used_by:
     - fis.connect.claims:000
-    - fis.instance.authorization.event:000
+    - fis.instance.authorization.event:001
     - g.node.forest.request:000
     - g.node.forest:002
     - g.node.gt:006
   non.empty.string:
     used_by:
     - fis.connect.claims:000
-    - fis.instance.authorization.event:000
+    - fis.instance.authorization.event:001
   universe.run:
     used_by:
     - fis.connect.claims:000
-    - fis.instance.authorization.event:000
+    - fis.instance.authorization.event:001
     - g.node.instance.gt:001
   utc.milliseconds:
     used_by:
-    - fis.instance.authorization.event:000
+    - fis.instance.authorization.event:001
     - g.node.forest:002
     - g.node.instance.gt:001
   uuid4.str:
     used_by:
     - connectivity.edge.gt:000
     - fis.connect.claims:000
-    - fis.instance.authorization.event:000
+    - fis.instance.authorization.event:001
     - g.node.forest.request:000
     - g.node.gt:006
     - g.node.instance.gt:001

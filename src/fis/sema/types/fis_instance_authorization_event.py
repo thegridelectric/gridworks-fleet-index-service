@@ -28,12 +28,12 @@ _PROJECTION = {
 
 
 class FisInstanceAuthorizationEvent(SemaType):
-    """Sema: https://schemas.electricity.works/types/fis.instance.authorization.event/000"""
+    """Sema: https://schemas.electricity.works/types/fis.instance.authorization.event/001"""
 
     event_id: UUID4Str
     principal_id: UUID4Str
-    instance_id: UUID4Str
-    run: UniverseRun
+    instance_id: UUID4Str | None = None
+    run: UniverseRun | None = None
     alias: LeftRightDot | None = None
     g_node_class: NonEmptyString | None = None
     transport: GNodeInstanceTransport
@@ -43,7 +43,7 @@ class FisInstanceAuthorizationEvent(SemaType):
     type_name: Literal["fis.instance.authorization.event"] = (
         "fis.instance.authorization.event"
     )
-    version: Literal["000"] = "000"
+    version: Literal["001"] = "001"
 
     @classmethod
     def project(cls, reason: FisAuthorizationReason) -> FisAuthorizationDecision:

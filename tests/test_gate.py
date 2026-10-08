@@ -23,6 +23,7 @@ from fis.gate import (
     Decision,
     GateReason,
     GateResult,
+    MalformedRequest,
     UserAuthRequest,
     decide_resource,
     decide_topic,
@@ -499,12 +500,20 @@ def test_parse_missing_username_is_malformed() -> None:
 
 
 def test_parse_bad_claims_is_malformed() -> None:
-    assert parse_user_request({"username": BEECH_ID, "claims": "not json"}) is None
+    # The principal is named and the shape says AMQP: both are kept for the
+    # record; the claim that did not decode is not.
+    assert parse_user_request(
+        {"username": BEECH_ID, "claims": "not json"}
+    ) == MalformedRequest(
+        principal_id=BEECH_ID, transport=GNodeInstanceTransport.RabbitAmqp
+    )
 
 
 def test_parse_mqtt_bad_client_id_is_malformed() -> None:
     params = {"username": BEECH_ID, "client_id": "not-a-uuid", "vhost": RUN}
-    assert parse_user_request(params) is None
+    assert parse_user_request(params) == MalformedRequest(
+        principal_id=BEECH_ID, transport=GNodeInstanceTransport.RabbitMqtt
+    )
 
 
 def test_service_principal_skips_registry_check(session) -> None:

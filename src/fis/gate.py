@@ -112,6 +112,17 @@ class UserAuthRequest(NamedTuple):
     g_node_class: str | None  # AMQP only
 
 
+class MalformedRequest(NamedTuple):
+    """A `/auth/user` request the broker forwarded for a named principal whose
+    instance claim did not decode: AMQP claims that are not a
+    `fis.connect.claims`, or an MQTT `client_id` that is not a uuid4. The
+    verdict is deny; what is known is recorded.
+    """
+
+    principal_id: str
+    transport: GNodeInstanceTransport
+
+
 def _allow(reason: GateReason) -> GateResult:
     return GateResult(Decision.Allow, reason)
 
@@ -120,9 +131,13 @@ def _deny(reason: GateReason) -> GateResult:
     return GateResult(Decision.Deny, reason)
 
 
-def parse_user_request(params: Mapping[str, str]) -> UserAuthRequest | None:
-    """Turn the broker's form/query params into a typed request, or `None`
-    when they are malformed (which the caller maps to deny).
+def parse_user_request(
+    params: Mapping[str, str],
+) -> UserAuthRequest | MalformedRequest | None:
+    """Turn the broker's form/query params into a typed request; a
+    `MalformedRequest` when the principal is named but its claim does not
+    decode; `None` when there is no principal to decide for (the caller maps
+    both to deny, and records only the first).
 
     The transport is discriminated structurally: a `claims` param means the
     GridWorks SASL mechanism carried a `fis.connect.claims` payload (AMQP);
@@ -140,7 +155,9 @@ def parse_user_request(params: Mapping[str, str]) -> UserAuthRequest | None:
             )
         except Exception as e:  # noqa: BLE001 -- any decode failure is "malformed"
             logger.info("auth/user malformed claims for %s: %s", username, e)
-            return None
+            return MalformedRequest(
+                principal_id=username, transport=GNodeInstanceTransport.RabbitAmqp
+            )
         return UserAuthRequest(
             principal_id=username,
             transport=GNodeInstanceTransport.RabbitAmqp,
@@ -157,7 +174,9 @@ def parse_user_request(params: Mapping[str, str]) -> UserAuthRequest | None:
             is_uuid4_str(client_id)  # the MQTT client_id must be a GNodeInstanceId
         except ValueError:
             logger.info("auth/user MQTT client_id not a uuid4 for %s", username)
-            return None
+            return MalformedRequest(
+                principal_id=username, transport=GNodeInstanceTransport.RabbitMqtt
+            )
         return UserAuthRequest(
             principal_id=username,
             transport=GNodeInstanceTransport.RabbitMqtt,

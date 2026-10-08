@@ -18,11 +18,11 @@ types:
         summary: "Initial Sema version"
 
   fis.instance.authorization.event:
-    latest_version: "000"
+    latest_version: "001"
     versioning_strategy: "literal"
     versions:
-      "000":
-        summary: "Initial Sema version"
+      "001":
+        summary: "InstanceId and Run optional, so a verdict on a request whose claims did not decode is recorded; PrincipalId and Transport stay required"
 
   g.node.forest:
     latest_version: "002"

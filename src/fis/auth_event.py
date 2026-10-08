@@ -20,7 +20,13 @@ import uuid
 from sqlalchemy.orm import Session
 
 from fis.db.models import AuthEventSql
-from fis.gate import Decision, GateReason, GateResult, UserAuthRequest
+from fis.gate import (
+    Decision,
+    GateReason,
+    GateResult,
+    MalformedRequest,
+    UserAuthRequest,
+)
 from fis.sema.enums import FisAuthorizationDecision, FisAuthorizationReason
 from fis.sema.types import FisInstanceAuthorizationEvent
 
@@ -50,18 +56,24 @@ DECISIONS: dict[Decision, FisAuthorizationDecision] = {
 
 
 def build_auth_event(
-    req: UserAuthRequest, result: GateResult, *, decided_at_unix_ms: int
+    req: UserAuthRequest | MalformedRequest,
+    result: GateResult,
+    *,
+    decided_at_unix_ms: int,
 ) -> FisInstanceAuthorizationEvent:
     """The event for one `/auth/user` verdict. Validated on construction:
     the word's projection axiom refuses a decision its reason does not
-    imply, so a drift between the gate and this mapping fails here, loudly."""
+    imply, so a drift between the gate and this mapping fails here, loudly.
+    A malformed request records the principal and transport the broker
+    forwarded; the instance claim it lacked stays absent."""
+    well_formed = isinstance(req, UserAuthRequest)
     return FisInstanceAuthorizationEvent(
         event_id=str(uuid.uuid4()),
         principal_id=req.principal_id,
-        instance_id=req.instance_id,
-        run=req.run,
-        alias=req.alias,
-        g_node_class=req.g_node_class,
+        instance_id=req.instance_id if well_formed else None,
+        run=req.run if well_formed else None,
+        alias=req.alias if well_formed else None,
+        g_node_class=req.g_node_class if well_formed else None,
         transport=req.transport,
         decision=DECISIONS[result.decision],
         reason=USER_REASONS[result.reason],
@@ -70,7 +82,7 @@ def build_auth_event(
 
 
 def record_auth_event(
-    session: Session, req: UserAuthRequest, result: GateResult
+    session: Session, req: UserAuthRequest | MalformedRequest, result: GateResult
 ) -> AuthEventSql:
     row = AuthEventSql.from_gt(
         build_auth_event(req, result, decided_at_unix_ms=int(time.time() * 1000))

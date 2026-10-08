@@ -1,5 +1,5 @@
 $schema: "https://json-schema.org/draft/2020-12/schema"
-$id: "https://schemas.electricity.works/types/fis.instance.authorization.event/000"
+$id: "https://schemas.electricity.works/types/fis.instance.authorization.event/001"
 
 title: "fis.instance.authorization.event"
 type: object
@@ -25,12 +25,14 @@ properties:
   InstanceId:
     $ref: "https://schemas.electricity.works/formats/uuid4.str"
     description: >
-      The runtime process instance that attempted to connect.
+      The runtime process instance that attempted to connect. Absent when
+      the connect request carried no decodable instance claim.
 
   Run:
     $ref: "https://schemas.electricity.works/formats/universe.run"
     description: >
-      The run the instance claimed to join.
+      The run the instance claimed to join. Absent when the connect
+      request carried no decodable run claim.
 
   Alias:
     $ref: "https://schemas.electricity.works/formats/left.right.dot"
@@ -64,13 +66,11 @@ properties:
     const: "fis.instance.authorization.event"
 
   Version:
-    const: "000"
+    const: "001"
 
 required:
   - EventId
   - PrincipalId
-  - InstanceId
-  - Run
   - Transport
   - Decision
   - Reason
@@ -94,7 +94,18 @@ examples:
       "Reason": "Superseded",
       "DecidedAtUnixMs": 1762634100033,
       "TypeName": "fis.instance.authorization.event",
-      "Version": "000"
+      "Version": "001"
+    }
+  - |
+    {
+      "EventId": "2b7e4d90-5c6a-4f1b-9d3e-0a1b2c3d4e5f",
+      "PrincipalId": "9fd6a1b2-3c4d-4e5f-8a6b-7c8d9e0f1a2b",
+      "Transport": "RabbitMqtt",
+      "Decision": "Denied",
+      "Reason": "MalformedRequest",
+      "DecidedAtUnixMs": 1762634100120,
+      "TypeName": "fis.instance.authorization.event",
+      "Version": "001"
     }
 
 x-gridworks:

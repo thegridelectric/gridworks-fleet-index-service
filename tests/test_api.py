@@ -20,7 +20,11 @@ from sqlalchemy.orm import Session, sessionmaker
 import fis.api
 from fis.api import create_app
 from fis.db.models import AuthEventSql, PrincipalKind, PrincipalSql, PrincipalStatus
-from fis.sema.enums import FisAuthorizationDecision
+from fis.sema.enums import (
+    FisAuthorizationDecision,
+    FisAuthorizationReason,
+    GNodeInstanceTransport,
+)
 from fis.sema.types import FisConnectClaims
 
 UNIVERSE = "hw1"
@@ -89,17 +93,51 @@ def _service_row() -> PrincipalSql:
     )
 
 
-def test_auth_user_malformed_claims_is_deny(client: TestClient) -> None:
+def test_auth_user_malformed_claims_is_deny_and_recorded(
+    client: TestClient, session: Session
+) -> None:
     response = client.post(
         "/auth/user", data={"username": SERVICE_ID, "claims": "not json"}
     )
     assert response.status_code == 200
     assert response.text == "deny"
+    # The broker named the principal and the transport is known from the
+    # request's shape; the instance claim it lacked stays absent.
+    events = session.scalars(select(AuthEventSql)).all()
+    assert len(events) == 1
+    event = events[0]
+    assert event.principal_id == SERVICE_ID
+    assert event.transport is GNodeInstanceTransport.RabbitAmqp
+    assert event.reason is FisAuthorizationReason.MalformedRequest
+    assert event.decision is FisAuthorizationDecision.Denied
+    assert event.instance_id is None and event.run is None
+    assert event.to_gt().instance_id is None
 
 
-def test_auth_user_without_username_is_deny(client: TestClient) -> None:
+def test_auth_user_mqtt_client_id_not_uuid4_is_deny_and_recorded(
+    client: TestClient, session: Session
+) -> None:
+    response = client.post(
+        "/auth/user",
+        data={
+            "username": SERVICE_ID,
+            "client_id": "3fa85f64-5717-4562-b3fc",
+            "vhost": RUN,
+        },
+    )
+    assert response.text == "deny"
+    events = session.scalars(select(AuthEventSql)).all()
+    assert [(e.transport, e.reason) for e in events] == [
+        (GNodeInstanceTransport.RabbitMqtt, FisAuthorizationReason.MalformedRequest)
+    ]
+
+
+def test_auth_user_without_username_is_deny_and_unrecorded(
+    client: TestClient, session: Session
+) -> None:
     response = client.post("/auth/user", data={"claims": _claims()})
     assert response.text == "deny"
+    assert session.scalars(select(AuthEventSql)).all() == []
 
 
 def test_auth_user_allows_a_service_and_records_the_event(
