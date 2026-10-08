@@ -21,7 +21,7 @@ types:
       types: []
       versionless_types: []
   fis.instance.authorization.event:
-    '000':
+    '001':
       enums:
       - fis.authorization.decision:000
       - fis.authorization.reason:000

@@ -7,7 +7,13 @@ import pytest
 
 from fis.auth_event import USER_REASONS, build_auth_event, record_auth_event
 from fis.db.models import AuthEventSql
-from fis.gate import Decision, GateReason, GateResult, UserAuthRequest
+from fis.gate import (
+    Decision,
+    GateReason,
+    GateResult,
+    MalformedRequest,
+    UserAuthRequest,
+)
 from fis.sema.enums import (
     FisAuthorizationDecision,
     FisAuthorizationReason,
@@ -45,6 +51,22 @@ def test_build_event_carries_the_verdict() -> None:
     assert event.decision is FisAuthorizationDecision.Authorized
     assert event.reason is FisAuthorizationReason.Superseded
     assert event.principal_id == BEECH_ID and event.run == "hw1__1"
+
+
+def test_build_event_for_a_malformed_request_carries_what_was_forwarded() -> None:
+    event = build_auth_event(
+        MalformedRequest(
+            principal_id=BEECH_ID, transport=GNodeInstanceTransport.RabbitMqtt
+        ),
+        GateResult(Decision.Deny, GateReason.Malformed),
+        decided_at_unix_ms=1762634100033,
+    )
+    assert event.reason is FisAuthorizationReason.MalformedRequest
+    assert event.decision is FisAuthorizationDecision.Denied
+    assert event.principal_id == BEECH_ID
+    assert event.transport is GNodeInstanceTransport.RabbitMqtt
+    assert event.instance_id is None and event.run is None
+    assert event.alias is None and event.g_node_class is None
 
 
 def test_projection_axiom_refuses_a_drifted_verdict() -> None:

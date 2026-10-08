@@ -15,7 +15,7 @@ initial_targets:
     fis.connect.claims:
       versions: ["000"]
     fis.instance.authorization.event:
-      versions: ["000"]
+      versions: ["001"]
     g.node.forest:
       versions: ["002"]
     g.node.forest.request:

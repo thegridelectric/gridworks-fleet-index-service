@@ -32,7 +32,9 @@ from fis.auth_event import record_auth_event
 from fis.db.session import SessionLocal
 from fis.gate import (
     Decision,
+    GateReason,
     GateResult,
+    MalformedRequest,
     decide_resource,
     decide_topic,
     decide_user,
@@ -116,9 +118,24 @@ def create_app(
         params = await _form_and_query(request)
         req = parse_user_request(params)
         if req is None:
-            # No typed request to record against: the claims did not decode.
-            logger.info("auth/user deny: malformed request")
+            # No principal named: nothing to decide for and nothing to record.
+            logger.info("auth/user deny: no principal in the request")
             return PlainTextResponse(Decision.Deny.value)
+        if isinstance(req, MalformedRequest):
+            malformed = GateResult(Decision.Deny, GateReason.Malformed)
+            logger.info(
+                "auth/user deny (malformed) principal=%s transport=%s",
+                req.principal_id,
+                req.transport.value,
+            )
+
+            def record_malformed() -> None:
+                with SessionLocal() as session:
+                    record_auth_event(session, req, malformed)
+
+            return PlainTextResponse(
+                Decision.Deny.value, background=BackgroundTask(record_malformed)
+            )
         result: GateResult | None = None
 
         def run() -> str:

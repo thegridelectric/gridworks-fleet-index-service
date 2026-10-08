@@ -283,8 +283,8 @@ class AuthEventSql(Base):
 
     event_id: Mapped[str] = mapped_column(String, primary_key=True)
     principal_id: Mapped[str] = mapped_column(String, index=True)
-    instance_id: Mapped[str] = mapped_column(String, index=True)
-    run: Mapped[str] = mapped_column(String)
+    instance_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    run: Mapped[str | None] = mapped_column(String, nullable=True)
     alias: Mapped[str | None] = mapped_column(String, nullable=True)
     g_node_class: Mapped[str | None] = mapped_column(String, nullable=True)
     transport: Mapped[GNodeInstanceTransport] = mapped_column(
