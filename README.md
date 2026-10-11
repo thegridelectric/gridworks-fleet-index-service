@@ -4,6 +4,16 @@ Fleet Index Service (FIS): the authority-plane service the RabbitMQ broker
 calls to authorize every connection and every topic publish, enforcing a
 single authorized runtime instance per (GNodeId, run).
 
+The broker is the only way to dispatch a GridWorks device, so the fleet's
+security is who may connect to it. Getting in takes a client certificate
+signed by the GridWorks CA, which proves the identity, and a yes from
+FIS, which admits only a known, active principal and only one running
+copy of it at a time: a new instance kicks the old one off. That keeps
+outsiders from dispatching grid assets and keeps two copies of one node
+(two LTNs for one scada) from ever running together.
+**[`how-fis-works.md`](how-fis-works.md)** explains the problem, the
+mechanism and a day in the life, for a reader new to FIS.
+
 FIS runs colocated with the broker, on the same box, with its own small
 Postgres. The broker reaches it over localhost; if FIS is unreachable, no
 new connections are admitted and existing ones survive. That is deliberate:
